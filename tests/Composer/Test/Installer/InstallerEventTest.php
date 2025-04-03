@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -13,29 +13,20 @@
 namespace Composer\Test\Installer;
 
 use Composer\Installer\InstallerEvent;
-use PHPUnit\Framework\TestCase;
+use Composer\Test\TestCase;
 
 class InstallerEventTest extends TestCase
 {
-    public function testGetter()
+    public function testGetter(): void
     {
         $composer = $this->getMockBuilder('Composer\Composer')->getMock();
         $io = $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
-        $policy = $this->getMockBuilder('Composer\DependencyResolver\PolicyInterface')->getMock();
-        $pool = $this->getMockBuilder('Composer\DependencyResolver\Pool')->disableOriginalConstructor()->getMock();
-        $installedRepo = $this->getMockBuilder('Composer\Repository\CompositeRepository')->disableOriginalConstructor()->getMock();
-        $request = $this->getMockBuilder('Composer\DependencyResolver\Request')->disableOriginalConstructor()->getMock();
-        $operations = array($this->getMockBuilder('Composer\DependencyResolver\Operation\OperationInterface')->getMock());
-        $event = new InstallerEvent('EVENT_NAME', $composer, $io, true, $policy, $pool, $installedRepo, $request, $operations);
+        $transaction = $this->getMockBuilder('Composer\DependencyResolver\LockTransaction')->disableOriginalConstructor()->getMock();
+        $event = new InstallerEvent('EVENT_NAME', $composer, $io, true, true, $transaction);
 
-        $this->assertSame('EVENT_NAME', $event->getName());
-        $this->assertInstanceOf('Composer\Composer', $event->getComposer());
-        $this->assertInstanceOf('Composer\IO\IOInterface', $event->getIO());
-        $this->assertTrue($event->isDevMode());
-        $this->assertInstanceOf('Composer\DependencyResolver\PolicyInterface', $event->getPolicy());
-        $this->assertInstanceOf('Composer\DependencyResolver\Pool', $event->getPool());
-        $this->assertInstanceOf('Composer\Repository\CompositeRepository', $event->getInstalledRepo());
-        $this->assertInstanceOf('Composer\DependencyResolver\Request', $event->getRequest());
-        $this->assertCount(1, $event->getOperations());
+        self::assertSame('EVENT_NAME', $event->getName());
+        self::assertTrue($event->isDevMode());
+        self::assertTrue($event->isExecutingOperations());
+        self::assertInstanceOf('Composer\DependencyResolver\Transaction', $event->getTransaction());
     }
 }

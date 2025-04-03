@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -13,32 +13,36 @@
 namespace Composer\Test\Downloader;
 
 use Composer\Downloader\DownloadManager;
-use PHPUnit\Framework\TestCase;
+use Composer\Package\PackageInterface;
+use Composer\Test\TestCase;
 
 class DownloadManagerTest extends TestCase
 {
+    /** @var \Composer\Util\Filesystem&\PHPUnit\Framework\MockObject\MockObject */
     protected $filesystem;
+
+    /** @var \Composer\IO\IOInterface&\PHPUnit\Framework\MockObject\MockObject */
     protected $io;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->filesystem = $this->getMockBuilder('Composer\Util\Filesystem')->getMock();
         $this->io = $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
     }
 
-    public function testSetGetDownloader()
+    public function testSetGetDownloader(): void
     {
         $downloader = $this->createDownloaderMock();
         $manager = new DownloadManager($this->io, false, $this->filesystem);
 
         $manager->setDownloader('test', $downloader);
-        $this->assertSame($downloader, $manager->getDownloader('test'));
+        self::assertSame($downloader, $manager->getDownloader('test'));
 
-        $this->setExpectedException('InvalidArgumentException');
+        self::expectException('InvalidArgumentException');
         $manager->getDownloader('unregistered');
     }
 
-    public function testGetDownloaderForIncorrectlyInstalledPackage()
+    public function testGetDownloaderForIncorrectlyInstalledPackage(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -48,12 +52,12 @@ class DownloadManagerTest extends TestCase
 
         $manager = new DownloadManager($this->io, false, $this->filesystem);
 
-        $this->setExpectedException('InvalidArgumentException');
+        self::expectException('InvalidArgumentException');
 
-        $manager->getDownloaderForInstalledPackage($package);
+        $manager->getDownloaderForPackage($package);
     }
 
-    public function testGetDownloaderForCorrectlyInstalledDistPackage()
+    public function testGetDownloaderForCorrectlyInstalledDistPackage(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -72,8 +76,8 @@ class DownloadManagerTest extends TestCase
             ->will($this->returnValue('dist'));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloader'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloader'])
             ->getMock();
 
         $manager
@@ -82,10 +86,10 @@ class DownloadManagerTest extends TestCase
             ->with('pear')
             ->will($this->returnValue($downloader));
 
-        $this->assertSame($downloader, $manager->getDownloaderForInstalledPackage($package));
+        self::assertSame($downloader, $manager->getDownloaderForPackage($package));
     }
 
-    public function testGetDownloaderForIncorrectlyInstalledDistPackage()
+    public function testGetDownloaderForIncorrectlyInstalledDistPackage(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -104,8 +108,8 @@ class DownloadManagerTest extends TestCase
             ->will($this->returnValue('source'));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloader'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloader'])
             ->getMock();
 
         $manager
@@ -114,12 +118,12 @@ class DownloadManagerTest extends TestCase
             ->with('git')
             ->will($this->returnValue($downloader));
 
-        $this->setExpectedException('LogicException');
+        self::expectException('LogicException');
 
-        $manager->getDownloaderForInstalledPackage($package);
+        $manager->getDownloaderForPackage($package);
     }
 
-    public function testGetDownloaderForCorrectlyInstalledSourcePackage()
+    public function testGetDownloaderForCorrectlyInstalledSourcePackage(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -138,8 +142,8 @@ class DownloadManagerTest extends TestCase
             ->will($this->returnValue('source'));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloader'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloader'])
             ->getMock();
 
         $manager
@@ -148,10 +152,10 @@ class DownloadManagerTest extends TestCase
             ->with('git')
             ->will($this->returnValue($downloader));
 
-        $this->assertSame($downloader, $manager->getDownloaderForInstalledPackage($package));
+        self::assertSame($downloader, $manager->getDownloaderForPackage($package));
     }
 
-    public function testGetDownloaderForIncorrectlyInstalledSourcePackage()
+    public function testGetDownloaderForIncorrectlyInstalledSourcePackage(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -170,8 +174,8 @@ class DownloadManagerTest extends TestCase
             ->will($this->returnValue('dist'));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloader'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloader'])
             ->getMock();
 
         $manager
@@ -180,12 +184,12 @@ class DownloadManagerTest extends TestCase
             ->with('pear')
             ->will($this->returnValue($downloader));
 
-        $this->setExpectedException('LogicException');
+        self::expectException('LogicException');
 
-        $manager->getDownloaderForInstalledPackage($package);
+        $manager->getDownloaderForPackage($package);
     }
 
-    public function testGetDownloaderForMetapackage()
+    public function testGetDownloaderForMetapackage(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -195,10 +199,10 @@ class DownloadManagerTest extends TestCase
 
         $manager = new DownloadManager($this->io, false, $this->filesystem);
 
-        $this->assertNull($manager->getDownloaderForInstalledPackage($package));
+        self::assertNull($manager->getDownloaderForPackage($package));
     }
 
-    public function testFullPackageDownload()
+    public function testFullPackageDownload(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -219,22 +223,23 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
         $manager->download($package, 'target_dir');
     }
 
-    public function testFullPackageDownloadFailover()
+    public function testFullPackageDownloadFailover(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -251,13 +256,16 @@ class DownloadManagerTest extends TestCase
             ->will($this->returnValue('prettyPackage'));
 
         $package
-            ->expects($this->at(3))
+            ->expects($this->exactly(2))
             ->method('setInstallationSource')
-            ->with('dist');
-        $package
-            ->expects($this->at(5))
-            ->method('setInstallationSource')
-            ->with('source');
+            ->willReturnCallback(function ($type) {
+                static $series = [
+                    'dist',
+                    'source',
+                ];
+
+                self::assertSame(array_shift($series), $type);
+            });
 
         $downloaderFail = $this->createDownloaderMock();
         $downloaderFail
@@ -270,27 +278,26 @@ class DownloadManagerTest extends TestCase
         $downloaderSuccess
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
-            ->expects($this->at(0))
-            ->method('getDownloaderForInstalledPackage')
+            ->expects($this->exactly(2))
+            ->method('getDownloaderForPackage')
             ->with($package)
-            ->will($this->returnValue($downloaderFail));
-        $manager
-            ->expects($this->at(1))
-            ->method('getDownloaderForInstalledPackage')
-            ->with($package)
-            ->will($this->returnValue($downloaderSuccess));
+            ->willReturnOnConsecutiveCalls(
+                $downloaderFail,
+                $downloaderSuccess
+            );
 
         $manager->download($package, 'target_dir');
     }
 
-    public function testBadPackageDownload()
+    public function testBadPackageDownload(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -304,11 +311,11 @@ class DownloadManagerTest extends TestCase
 
         $manager = new DownloadManager($this->io, false, $this->filesystem);
 
-        $this->setExpectedException('InvalidArgumentException');
+        self::expectException('InvalidArgumentException');
         $manager->download($package, 'target_dir');
     }
 
-    public function testDistOnlyPackageDownload()
+    public function testDistOnlyPackageDownload(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -329,22 +336,23 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
         $manager->download($package, 'target_dir');
     }
 
-    public function testSourceOnlyPackageDownload()
+    public function testSourceOnlyPackageDownload(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -365,22 +373,23 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
         $manager->download($package, 'target_dir');
     }
 
-    public function testMetapackagePackageDownload()
+    public function testMetapackagePackageDownload(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -398,19 +407,19 @@ class DownloadManagerTest extends TestCase
           ->with('source');
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-          ->setConstructorArgs(array($this->io, false, $this->filesystem))
-          ->setMethods(array('getDownloaderForInstalledPackage'))
+          ->setConstructorArgs([$this->io, false, $this->filesystem])
+          ->onlyMethods(['getDownloaderForPackage'])
           ->getMock();
         $manager
           ->expects($this->once())
-          ->method('getDownloaderForInstalledPackage')
+          ->method('getDownloaderForPackage')
           ->with($package)
           ->will($this->returnValue(null)); // There is no downloader for Metapackages.
 
         $manager->download($package, 'target_dir');
     }
 
-    public function testFullPackageDownloadWithSourcePreferred()
+    public function testFullPackageDownloadWithSourcePreferred(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -431,15 +440,16 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
@@ -447,7 +457,7 @@ class DownloadManagerTest extends TestCase
         $manager->download($package, 'target_dir');
     }
 
-    public function testDistOnlyPackageDownloadWithSourcePreferred()
+    public function testDistOnlyPackageDownloadWithSourcePreferred(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -468,15 +478,16 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
@@ -484,7 +495,7 @@ class DownloadManagerTest extends TestCase
         $manager->download($package, 'target_dir');
     }
 
-    public function testSourceOnlyPackageDownloadWithSourcePreferred()
+    public function testSourceOnlyPackageDownloadWithSourcePreferred(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -505,15 +516,16 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
@@ -521,7 +533,7 @@ class DownloadManagerTest extends TestCase
         $manager->download($package, 'target_dir');
     }
 
-    public function testBadPackageDownloadWithSourcePreferred()
+    public function testBadPackageDownloadWithSourcePreferred(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -536,11 +548,11 @@ class DownloadManagerTest extends TestCase
         $manager = new DownloadManager($this->io, false, $this->filesystem);
         $manager->setPreferSource(true);
 
-        $this->setExpectedException('InvalidArgumentException');
+        self::expectException('InvalidArgumentException');
         $manager->download($package, 'target_dir');
     }
 
-    public function testUpdateDistWithEqualTypes()
+    public function testUpdateDistWithEqualTypes(): void
     {
         $initial = $this->createPackageMock();
         $initial
@@ -550,38 +562,36 @@ class DownloadManagerTest extends TestCase
         $initial
             ->expects($this->once())
             ->method('getDistType')
-            ->will($this->returnValue('pear'));
+            ->will($this->returnValue('zip'));
 
         $target = $this->createPackageMock();
         $target
             ->expects($this->once())
-            ->method('getDistType')
-            ->will($this->returnValue('pear'));
+            ->method('getInstallationSource')
+            ->will($this->returnValue('dist'));
         $target
             ->expects($this->once())
-            ->method('setInstallationSource')
-            ->with('dist');
+            ->method('getDistType')
+            ->will($this->returnValue('zip'));
 
-        $pearDownloader = $this->createDownloaderMock();
-        $pearDownloader
+        $zipDownloader = $this->createDownloaderMock();
+        $zipDownloader
             ->expects($this->once())
             ->method('update')
-            ->with($initial, $target, 'vendor/bundles/FOS/UserBundle');
+            ->with($initial, $target, 'vendor/bundles/FOS/UserBundle')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
+        $zipDownloader
+            ->expects($this->any())
+            ->method('getInstallationSource')
+            ->will($this->returnValue('dist'));
 
-        $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
-            ->getMock();
-        $manager
-            ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
-            ->with($initial)
-            ->will($this->returnValue($pearDownloader));
+        $manager = new DownloadManager($this->io, false, $this->filesystem);
+        $manager->setDownloader('zip', $zipDownloader);
 
         $manager->update($initial, $target, 'vendor/bundles/FOS/UserBundle');
     }
 
-    public function testUpdateDistWithNotEqualTypes()
+    public function testUpdateDistWithNotEqualTypes(): void
     {
         $initial = $this->createPackageMock();
         $initial
@@ -591,134 +601,124 @@ class DownloadManagerTest extends TestCase
         $initial
             ->expects($this->once())
             ->method('getDistType')
-            ->will($this->returnValue('pear'));
+            ->will($this->returnValue('xz'));
 
         $target = $this->createPackageMock();
         $target
-            ->expects($this->once())
+            ->expects($this->any())
+            ->method('getInstallationSource')
+            ->will($this->returnValue('dist'));
+        $target
+            ->expects($this->any())
             ->method('getDistType')
-            ->will($this->returnValue('composer'));
+            ->will($this->returnValue('zip'));
 
-        $pearDownloader = $this->createDownloaderMock();
-        $pearDownloader
+        $xzDownloader = $this->createDownloaderMock();
+        $xzDownloader
             ->expects($this->once())
             ->method('remove')
-            ->with($initial, 'vendor/bundles/FOS/UserBundle');
+            ->with($initial, 'vendor/bundles/FOS/UserBundle')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
+        $xzDownloader
+            ->expects($this->any())
+            ->method('getInstallationSource')
+            ->will($this->returnValue('dist'));
 
-        $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage', 'download'))
-            ->getMock();
-        $manager
+        $zipDownloader = $this->createDownloaderMock();
+        $zipDownloader
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
-            ->with($initial)
-            ->will($this->returnValue($pearDownloader));
-        $manager
-            ->expects($this->once())
-            ->method('download')
-            ->with($target, 'vendor/bundles/FOS/UserBundle', false);
+            ->method('install')
+            ->with($target, 'vendor/bundles/FOS/UserBundle')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
+        $zipDownloader
+            ->expects($this->any())
+            ->method('getInstallationSource')
+            ->will($this->returnValue('dist'));
+
+        $manager = new DownloadManager($this->io, false, $this->filesystem);
+        $manager->setDownloader('xz', $xzDownloader);
+        $manager->setDownloader('zip', $zipDownloader);
 
         $manager->update($initial, $target, 'vendor/bundles/FOS/UserBundle');
     }
 
-    public function testUpdateSourceWithEqualTypes()
+    /**
+     * @dataProvider updatesProvider
+     * @param string[] $targetAvailable
+     * @param string[] $expected
+     */
+    public function testGetAvailableSourcesUpdateSticksToSameSource(?string $prevPkgSource, ?bool $prevPkgIsDev, array $targetAvailable, bool $targetIsDev, array $expected): void
     {
-        $initial = $this->createPackageMock();
-        $initial
-            ->expects($this->once())
-            ->method('getInstallationSource')
-            ->will($this->returnValue('source'));
-        $initial
-            ->expects($this->once())
+        $initial = null;
+        if ($prevPkgSource) {
+            $initial = $this->getMockBuilder(PackageInterface::class)->getMock();
+            $initial->expects($this->atLeastOnce())
+                ->method('getInstallationSource')
+                ->willReturn($prevPkgSource);
+            $initial->expects($this->any())
+                ->method('isDev')
+                ->willReturn($prevPkgIsDev);
+        }
+
+        $target = $this->getMockBuilder(PackageInterface::class)->getMock();
+        $target->expects($this->atLeastOnce())
             ->method('getSourceType')
-            ->will($this->returnValue('svn'));
+            ->willReturn(in_array('source', $targetAvailable, true) ? 'git' : null);
+        $target->expects($this->atLeastOnce())
+            ->method('getDistType')
+            ->willReturn(in_array('dist', $targetAvailable, true) ? 'zip' : null);
+        $target->expects($this->any())
+            ->method('isDev')
+            ->willReturn($targetIsDev);
 
-        $target = $this->createPackageMock();
-        $target
-            ->expects($this->once())
-            ->method('getSourceType')
-            ->will($this->returnValue('svn'));
-
-        $svnDownloader = $this->createDownloaderMock();
-        $svnDownloader
-            ->expects($this->once())
-            ->method('update')
-            ->with($initial, $target, 'vendor/pkg');
-
-        $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage', 'download'))
-            ->getMock();
-        $manager
-            ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
-            ->with($initial)
-            ->will($this->returnValue($svnDownloader));
-
-        $manager->update($initial, $target, 'vendor/pkg');
+        $manager = new DownloadManager($this->io, false, $this->filesystem);
+        $method = new \ReflectionMethod($manager, 'getAvailableSources');
+        $method->setAccessible(true);
+        self::assertEquals($expected, $method->invoke($manager, $target, $initial ?? null));
     }
 
-    public function testUpdateSourceWithNotEqualTypes()
+    public static function updatesProvider(): array
     {
-        $initial = $this->createPackageMock();
-        $initial
-            ->expects($this->once())
-            ->method('getInstallationSource')
-            ->will($this->returnValue('source'));
-        $initial
-            ->expects($this->once())
-            ->method('getSourceType')
-            ->will($this->returnValue('svn'));
-
-        $target = $this->createPackageMock();
-        $target
-            ->expects($this->once())
-            ->method('getSourceType')
-            ->will($this->returnValue('git'));
-
-        $svnDownloader = $this->createDownloaderMock();
-        $svnDownloader
-            ->expects($this->once())
-            ->method('remove')
-            ->with($initial, 'vendor/pkg');
-
-        $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage', 'download'))
-            ->getMock();
-        $manager
-            ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
-            ->with($initial)
-            ->will($this->returnValue($svnDownloader));
-        $manager
-            ->expects($this->once())
-            ->method('download')
-            ->with($target, 'vendor/pkg', true);
-
-        $manager->update($initial, $target, 'vendor/pkg');
+        return [
+            //    prevPkg source,  prevPkg isDev, pkg available,           pkg isDev,  expected
+            // updates keep previous source as preference
+            ['source',        false,         ['source', 'dist'], false,      ['source', 'dist']],
+            ['dist',          false,         ['source', 'dist'], false,      ['dist', 'source']],
+            // updates do not keep previous source if target package does not have it
+            ['source',        false,         ['dist'],           false,      ['dist']],
+            ['dist',          false,         ['source'],         false,      ['source']],
+            // updates do not keep previous source if target is dev and prev wasn't dev and installed from dist
+            ['source',        false,         ['source', 'dist'], true,       ['source', 'dist']],
+            ['dist',          false,         ['source', 'dist'], true,       ['source', 'dist']],
+            // install picks the right default
+            [null,            null,          ['source', 'dist'], true,       ['source', 'dist']],
+            [null,            null,          ['dist'],           true,       ['dist']],
+            [null,            null,          ['source'],         true,       ['source']],
+            [null,            null,          ['source', 'dist'], false,      ['dist', 'source']],
+            [null,            null,          ['dist'],           false,      ['dist']],
+            [null,            null,          ['source'],         false,      ['source']],
+        ];
     }
 
-    public function testUpdateMetapackage()
+    public function testUpdateMetapackage(): void
     {
         $initial = $this->createPackageMock();
         $target = $this->createPackageMock();
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-          ->setConstructorArgs(array($this->io, false, $this->filesystem))
-          ->setMethods(array('getDownloaderForInstalledPackage'))
+          ->setConstructorArgs([$this->io, false, $this->filesystem])
+          ->onlyMethods(['getDownloaderForPackage'])
           ->getMock();
         $manager
-          ->expects($this->once())
-          ->method('getDownloaderForInstalledPackage')
+          ->expects($this->exactly(2))
+          ->method('getDownloaderForPackage')
           ->with($initial)
           ->will($this->returnValue(null)); // There is no downloader for metapackages.
 
         $manager->update($initial, $target, 'vendor/pkg');
     }
 
-    public function testRemove()
+    public function testRemove(): void
     {
         $package = $this->createPackageMock();
 
@@ -729,29 +729,29 @@ class DownloadManagerTest extends TestCase
             ->with($package, 'vendor/bundles/FOS/UserBundle');
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($pearDownloader));
 
         $manager->remove($package, 'vendor/bundles/FOS/UserBundle');
     }
 
-    public function testMetapackageRemove()
+    public function testMetapackageRemove(): void
     {
         $package = $this->createPackageMock();
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-          ->setConstructorArgs(array($this->io, false, $this->filesystem))
-          ->setMethods(array('getDownloaderForInstalledPackage'))
+          ->setConstructorArgs([$this->io, false, $this->filesystem])
+          ->onlyMethods(['getDownloaderForPackage'])
           ->getMock();
         $manager
           ->expects($this->once())
-          ->method('getDownloaderForInstalledPackage')
+          ->method('getDownloaderForPackage')
           ->with($package)
           ->will($this->returnValue(null)); // There is no downloader for metapackages.
 
@@ -761,7 +761,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithoutPreferenceDev()
+    public function testInstallPreferenceWithoutPreferenceDev(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -786,15 +786,16 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
@@ -804,7 +805,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithoutPreferenceNoDev()
+    public function testInstallPreferenceWithoutPreferenceNoDev(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -829,15 +830,16 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
 
@@ -847,7 +849,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithoutMatchDev()
+    public function testInstallPreferenceWithoutMatchDev(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -875,18 +877,19 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
-        $manager->setPreferences(array('foo/*' => 'source'));
+        $manager->setPreferences(['foo/*' => 'source']);
 
         $manager->download($package, 'target_dir');
     }
@@ -894,7 +897,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithoutMatchNoDev()
+    public function testInstallPreferenceWithoutMatchNoDev(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -922,18 +925,19 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
-        $manager->setPreferences(array('foo/*' => 'source'));
+        $manager->setPreferences(['foo/*' => 'source']);
 
         $manager->download($package, 'target_dir');
     }
@@ -941,7 +945,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithMatchAutoDev()
+    public function testInstallPreferenceWithMatchAutoDev(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -969,18 +973,19 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
-        $manager->setPreferences(array('foo/*' => 'auto'));
+        $manager->setPreferences(['foo/*' => 'auto']);
 
         $manager->download($package, 'target_dir');
     }
@@ -988,7 +993,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithMatchAutoNoDev()
+    public function testInstallPreferenceWithMatchAutoNoDev(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -1016,18 +1021,19 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
-        $manager->setPreferences(array('foo/*' => 'auto'));
+        $manager->setPreferences(['foo/*' => 'auto']);
 
         $manager->download($package, 'target_dir');
     }
@@ -1035,7 +1041,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithMatchSource()
+    public function testInstallPreferenceWithMatchSource(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -1059,18 +1065,19 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
-        $manager->setPreferences(array('foo/*' => 'source'));
+        $manager->setPreferences(['foo/*' => 'source']);
 
         $manager->download($package, 'target_dir');
     }
@@ -1078,7 +1085,7 @@ class DownloadManagerTest extends TestCase
     /**
      * @covers Composer\Downloader\DownloadManager::resolvePackageInstallPreference
      */
-    public function testInstallPreferenceWithMatchDist()
+    public function testInstallPreferenceWithMatchDist(): void
     {
         $package = $this->createPackageMock();
         $package
@@ -1102,28 +1109,35 @@ class DownloadManagerTest extends TestCase
         $downloader
             ->expects($this->once())
             ->method('download')
-            ->with($package, 'target_dir');
+            ->with($package, 'target_dir')
+            ->will($this->returnValue(\React\Promise\resolve(null)));
 
         $manager = $this->getMockBuilder('Composer\Downloader\DownloadManager')
-            ->setConstructorArgs(array($this->io, false, $this->filesystem))
-            ->setMethods(array('getDownloaderForInstalledPackage'))
+            ->setConstructorArgs([$this->io, false, $this->filesystem])
+            ->onlyMethods(['getDownloaderForPackage'])
             ->getMock();
         $manager
             ->expects($this->once())
-            ->method('getDownloaderForInstalledPackage')
+            ->method('getDownloaderForPackage')
             ->with($package)
             ->will($this->returnValue($downloader));
-        $manager->setPreferences(array('foo/*' => 'dist'));
+        $manager->setPreferences(['foo/*' => 'dist']);
 
         $manager->download($package, 'target_dir');
     }
 
+    /**
+     * @return \Composer\Downloader\DownloaderInterface&\PHPUnit\Framework\MockObject\MockObject
+     */
     private function createDownloaderMock()
     {
         return $this->getMockBuilder('Composer\Downloader\DownloaderInterface')
             ->getMock();
     }
 
+    /**
+     * @return \Composer\Package\PackageInterface&\PHPUnit\Framework\MockObject\MockObject
+     */
     private function createPackageMock()
     {
         return $this->getMockBuilder('Composer\Package\PackageInterface')

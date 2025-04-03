@@ -1,5 +1,5 @@
 --TEST--
-Updates a dev package forcing it's reference
+Updates a dev package forcing its reference
 --COMPOSER--
 {
     "repositories": [
@@ -8,7 +8,7 @@ Updates a dev package forcing it's reference
             "package": [
                 {
                     "name": "a/a", "version": "dev-master",
-                    "source": { "reference": "abc123", "url": "", "type": "git" }
+                    "source": { "reference": "abc123", "url": "https://example.org", "type": "git" }
                 }
             ]
         }
@@ -21,10 +21,10 @@ Updates a dev package forcing it's reference
 [
     {
         "name": "a/a", "version": "dev-master",
-        "source": { "reference": "abc123", "url": "", "type": "git" }
+        "source": { "reference": "abc123", "url": "https://example.org", "type": "git" }
     }
 ]
 --RUN--
 install
 --EXPECT--
-Updating a/a (dev-master abc123) to a/a (dev-master def000)
+Upgrading a/a (dev-master abc123 => dev-master def000)

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -14,63 +14,66 @@ namespace Composer\Test\Util;
 
 use Composer\Util\IniHelper;
 use Composer\XdebugHandler\XdebugHandler;
-use PHPUnit\Framework\TestCase;
+use Composer\Test\TestCase;
 
 /**
  * @author John Stevenson <john-stevenson@blueyonder.co.uk>
  */
 class IniHelperTest extends TestCase
 {
+    /**
+     * @var string|false
+     */
     public static $envOriginal;
 
-    public function testWithNoIni()
+    public function testWithNoIni(): void
     {
-        $paths = array(
+        $paths = [
             '',
-        );
+        ];
 
         $this->setEnv($paths);
-        $this->assertContains('does not exist', IniHelper::getMessage());
-        $this->assertEquals($paths, IniHelper::getAll());
+        self::assertStringContainsString('does not exist', IniHelper::getMessage());
+        self::assertEquals($paths, IniHelper::getAll());
     }
 
-    public function testWithLoadedIniOnly()
+    public function testWithLoadedIniOnly(): void
     {
-        $paths = array(
+        $paths = [
             'loaded.ini',
-        );
+        ];
 
         $this->setEnv($paths);
-        $this->assertContains('loaded.ini', IniHelper::getMessage());
+        self::assertStringContainsString('loaded.ini', IniHelper::getMessage());
     }
 
-    public function testWithLoadedIniAndAdditional()
+    public function testWithLoadedIniAndAdditional(): void
     {
-        $paths = array(
+        $paths = [
             'loaded.ini',
             'one.ini',
             'two.ini',
-        );
+        ];
 
         $this->setEnv($paths);
-        $this->assertContains('multiple ini files', IniHelper::getMessage());
-        $this->assertEquals($paths, IniHelper::getAll());
+        self::assertStringContainsString('multiple ini files', IniHelper::getMessage());
+        self::assertEquals($paths, IniHelper::getAll());
     }
 
-    public function testWithoutLoadedIniAndAdditional()
+    public function testWithoutLoadedIniAndAdditional(): void
     {
-        $paths = array(
+        $paths = [
             '',
             'one.ini',
             'two.ini',
-        );
+        ];
 
         $this->setEnv($paths);
-        $this->assertContains('multiple ini files', IniHelper::getMessage());
-        $this->assertEquals($paths, IniHelper::getAll());
+        self::assertStringContainsString('multiple ini files', IniHelper::getMessage());
+        self::assertEquals($paths, IniHelper::getAll());
     }
 
-    public static function setUpBeforeClass()
+    public static function setUpBeforeClass(): void
     {
         // Register our name with XdebugHandler
         $xdebug = new XdebugHandler('composer');
@@ -78,7 +81,7 @@ class IniHelperTest extends TestCase
         self::$envOriginal = getenv('COMPOSER_ORIGINAL_INIS');
     }
 
-    public static function tearDownAfterClass()
+    public static function tearDownAfterClass(): void
     {
         // Restore original state
         if (false !== self::$envOriginal) {
@@ -88,7 +91,10 @@ class IniHelperTest extends TestCase
         }
     }
 
-    protected function setEnv(array $paths)
+    /**
+     * @param string[] $paths
+     */
+    protected function setEnv(array $paths): void
     {
         putenv('COMPOSER_ORIGINAL_INIS='.implode(PATH_SEPARATOR, $paths));
     }

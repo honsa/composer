@@ -1,5 +1,5 @@
 --TEST--
-Partial update forces updates dev reference from lock file for non whitelisted packages
+Partial update forces updates dev reference from lock file for non allowed packages
 --COMPOSER--
 {
     "repositories": [
@@ -59,11 +59,11 @@ Partial update forces updates dev reference from lock file for non whitelisted p
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": [],
-    "platform-dev": []
+    "platform": {},
+    "platform-dev": {}
 }
 --RUN--
 update b/b
@@ -86,12 +86,12 @@ update b/b
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": [],
-    "platform-dev": []
+    "platform": {},
+    "platform-dev": {}
 }
 --EXPECT--
-Updating a/a (dev-master oldmaster-a) to a/a (dev-master newmaster-a)
-Updating b/b (dev-master oldmaster-b) to b/b (dev-master newmaster-b2)
+Upgrading a/a (dev-master oldmaster-a => dev-master newmaster-a)
+Upgrading b/b (dev-master oldmaster-b => dev-master newmaster-b2)

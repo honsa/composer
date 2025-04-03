@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -13,7 +13,7 @@
 namespace Composer\Test\Util;
 
 use Composer\Util\Platform;
-use PHPUnit\Framework\TestCase;
+use Composer\Test\TestCase;
 
 /**
  * PlatformTest
@@ -22,18 +22,18 @@ use PHPUnit\Framework\TestCase;
  */
 class PlatformTest extends TestCase
 {
-    public function testExpandPath()
+    public function testExpandPath(): void
     {
         putenv('TESTENV=/home/test');
-        $this->assertEquals('/home/test/myPath', Platform::expandPath('%TESTENV%/myPath'));
-        $this->assertEquals('/home/test/myPath', Platform::expandPath('$TESTENV/myPath'));
-        $this->assertEquals((getenv('HOME') ?: getenv('USERPROFILE')) . '/test', Platform::expandPath('~/test'));
+        self::assertEquals('/home/test/myPath', Platform::expandPath('%TESTENV%/myPath'));
+        self::assertEquals('/home/test/myPath', Platform::expandPath('$TESTENV/myPath'));
+        self::assertEquals((getenv('HOME') ?: getenv('USERPROFILE')) . '/test', Platform::expandPath('~/test'));
     }
 
-    public function testIsWindows()
+    public function testIsWindows(): void
     {
         // Compare 2 common tests for Windows to the built-in Windows test
-        $this->assertEquals(('\\' === DIRECTORY_SEPARATOR), Platform::isWindows());
-        $this->assertEquals(defined('PHP_WINDOWS_VERSION_MAJOR'), Platform::isWindows());
+        self::assertEquals(('\\' === DIRECTORY_SEPARATOR), Platform::isWindows());
+        self::assertEquals(defined('PHP_WINDOWS_VERSION_MAJOR'), Platform::isWindows());
     }
 }

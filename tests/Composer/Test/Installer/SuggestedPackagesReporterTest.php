@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -12,20 +12,30 @@
 
 namespace Composer\Test\Installer;
 
+use Composer\InstalledVersions;
 use Composer\Installer\SuggestedPackagesReporter;
-use PHPUnit\Framework\TestCase;
+use Composer\Semver\VersionParser;
+use Composer\Test\Mock\IOMock;
+use Composer\Test\TestCase;
 
 /**
  * @coversDefaultClass Composer\Installer\SuggestedPackagesReporter
  */
 class SuggestedPackagesReporterTest extends TestCase
 {
+    /**
+     * @var IOMock
+     */
     private $io;
+
+    /**
+     * @var \Composer\Installer\SuggestedPackagesReporter
+     */
     private $suggestedPackagesReporter;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->io = $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
+        $this->io = $this->getIOMock();
 
         $this->suggestedPackagesReporter = new SuggestedPackagesReporter($this->io);
     }
@@ -33,29 +43,27 @@ class SuggestedPackagesReporterTest extends TestCase
     /**
      * @covers ::__construct
      */
-    public function testContrsuctor()
+    public function testConstructor(): void
     {
-        $this->io->expects($this->once())
-            ->method('writeError');
+        $this->io->expects([['text' => 'b']], true);
 
-        $suggestedPackagesReporter = new SuggestedPackagesReporter($this->io);
-        $suggestedPackagesReporter->addPackage('a', 'b', 'c');
-        $suggestedPackagesReporter->output();
+        $this->suggestedPackagesReporter->addPackage('a', 'b', 'c');
+        $this->suggestedPackagesReporter->output(SuggestedPackagesReporter::MODE_LIST);
     }
 
     /**
      * @covers ::getPackages
      */
-    public function testGetPackagesEmptyByDefault()
+    public function testGetPackagesEmptyByDefault(): void
     {
-        $this->assertEmpty($this->suggestedPackagesReporter->getPackages());
+        self::assertEmpty($this->suggestedPackagesReporter->getPackages());
     }
 
     /**
      * @covers ::getPackages
      * @covers ::addPackage
      */
-    public function testGetPackages()
+    public function testGetPackages(): void
     {
         $suggestedPackage = $this->getSuggestedPackageArray();
         $this->suggestedPackagesReporter->addPackage(
@@ -63,8 +71,8 @@ class SuggestedPackagesReporterTest extends TestCase
             $suggestedPackage['target'],
             $suggestedPackage['reason']
         );
-        $this->assertSame(
-            array($suggestedPackage),
+        self::assertSame(
+            [$suggestedPackage],
             $this->suggestedPackagesReporter->getPackages()
         );
     }
@@ -75,7 +83,7 @@ class SuggestedPackagesReporterTest extends TestCase
      *
      * @covers ::addPackage
      */
-    public function testAddPackageAppends()
+    public function testAddPackageAppends(): void
     {
         $suggestedPackageA = $this->getSuggestedPackageArray();
         $suggestedPackageB = $this->getSuggestedPackageArray();
@@ -91,8 +99,8 @@ class SuggestedPackagesReporterTest extends TestCase
             $suggestedPackageB['target'],
             $suggestedPackageB['reason']
         );
-        $this->assertSame(
-            array($suggestedPackageA, $suggestedPackageB),
+        self::assertSame(
+            [$suggestedPackageA, $suggestedPackageB],
             $this->suggestedPackagesReporter->getPackages()
         );
     }
@@ -100,159 +108,171 @@ class SuggestedPackagesReporterTest extends TestCase
     /**
      * @covers ::addSuggestionsFromPackage
      */
-    public function testAddSuggestionsFromPackage()
+    public function testAddSuggestionsFromPackage(): void
     {
         $package = $this->createPackageMock();
         $package->expects($this->once())
             ->method('getSuggests')
-            ->will($this->returnValue(array(
+            ->will($this->returnValue([
                 'target-a' => 'reason-a',
                 'target-b' => 'reason-b',
-            )));
+            ]));
         $package->expects($this->once())
             ->method('getPrettyName')
             ->will($this->returnValue('package-pretty-name'));
 
         $this->suggestedPackagesReporter->addSuggestionsFromPackage($package);
-        $this->assertSame(array(
-            array(
+        self::assertSame([
+            [
                 'source' => 'package-pretty-name',
                 'target' => 'target-a',
                 'reason' => 'reason-a',
-            ),
-            array(
+            ],
+            [
                 'source' => 'package-pretty-name',
                 'target' => 'target-b',
                 'reason' => 'reason-b',
-            ),
-        ), $this->suggestedPackagesReporter->getPackages());
+            ],
+        ], $this->suggestedPackagesReporter->getPackages());
     }
 
     /**
      * @covers ::output
      */
-    public function testOutput()
+    public function testOutput(): void
     {
         $this->suggestedPackagesReporter->addPackage('a', 'b', 'c');
 
-        $this->io->expects($this->once())
-            ->method('writeError')
-            ->with('a suggests installing b (c)');
+        $this->io->expects([
+            ['text' => 'a suggests:'],
+            ['text' => ' - b: c'],
+            ['text' => ''],
+        ], true);
 
-        $this->suggestedPackagesReporter->output();
+        $this->suggestedPackagesReporter->output(SuggestedPackagesReporter::MODE_BY_PACKAGE);
     }
 
     /**
      * @covers ::output
      */
-    public function testOutputWithNoSuggestedPackage()
+    public function testOutputWithNoSuggestionReason(): void
     {
         $this->suggestedPackagesReporter->addPackage('a', 'b', '');
 
-        $this->io->expects($this->once())
-            ->method('writeError')
-            ->with('a suggests installing b');
+        $this->io->expects([
+            ['text' => 'a suggests:'],
+            ['text' => ' - b'],
+            ['text' => ''],
+        ], true);
 
-        $this->suggestedPackagesReporter->output();
+        $this->suggestedPackagesReporter->output(SuggestedPackagesReporter::MODE_BY_PACKAGE);
     }
 
     /**
      * @covers ::output
      */
-    public function testOutputIgnoresFormatting()
+    public function testOutputIgnoresFormatting(): void
     {
         $this->suggestedPackagesReporter->addPackage('source', 'target1', "\x1b[1;37;42m Like us\r\non Facebook \x1b[0m");
         $this->suggestedPackagesReporter->addPackage('source', 'target2', "<bg=green>Like us on Facebook</>");
 
-        $this->io->expects($this->at(0))
-            ->method('writeError')
-            ->with("source suggests installing target1 ([1;37;42m Like us on Facebook [0m)");
+        $this->io->expects([
+            ['text' => 'source suggests:'],
+            ['text' => ' - target1: [1;37;42m Like us on Facebook [0m'],
+            ['text' => ' - target2: <bg=green>Like us on Facebook</>'],
+            ['text' => ''],
+        ], true);
 
-        $this->io->expects($this->at(1))
-            ->method('writeError')
-            ->with('source suggests installing target2 (\\<bg=green>Like us on Facebook\\</>)');
-
-        $this->suggestedPackagesReporter->output();
+        $this->suggestedPackagesReporter->output(SuggestedPackagesReporter::MODE_BY_PACKAGE);
     }
 
     /**
      * @covers ::output
      */
-    public function testOutputMultiplePackages()
+    public function testOutputMultiplePackages(): void
     {
         $this->suggestedPackagesReporter->addPackage('a', 'b', 'c');
         $this->suggestedPackagesReporter->addPackage('source package', 'target', 'because reasons');
 
-        $this->io->expects($this->at(0))
-            ->method('writeError')
-            ->with('a suggests installing b (c)');
+        $this->io->expects([
+            ['text' => 'a suggests:'],
+            ['text' => ' - b: c'],
+            ['text' => ''],
+            ['text' => 'source package suggests:'],
+            ['text' => ' - target: because reasons'],
+            ['text' => ''],
+        ], true);
 
-        $this->io->expects($this->at(1))
-            ->method('writeError')
-            ->with('source package suggests installing target (because reasons)');
-
-        $this->suggestedPackagesReporter->output();
+        $this->suggestedPackagesReporter->output(SuggestedPackagesReporter::MODE_BY_PACKAGE);
     }
 
     /**
      * @covers ::output
      */
-    public function testOutputSkipInstalledPackages()
+    public function testOutputSkipInstalledPackages(): void
     {
-        $repository = $this->getMockBuilder('Composer\Repository\RepositoryInterface')->getMock();
+        $repository = $this->getMockBuilder('Composer\Repository\InstalledRepository')->disableOriginalConstructor()->getMock();
         $package1 = $this->getMockBuilder('Composer\Package\PackageInterface')->getMock();
         $package2 = $this->getMockBuilder('Composer\Package\PackageInterface')->getMock();
 
         $package1->expects($this->once())
             ->method('getNames')
-            ->will($this->returnValue(array('x', 'y')));
+            ->will($this->returnValue(['x', 'y']));
 
         $package2->expects($this->once())
             ->method('getNames')
-            ->will($this->returnValue(array('b')));
+            ->will($this->returnValue(['b']));
 
         $repository->expects($this->once())
             ->method('getPackages')
-            ->will($this->returnValue(array(
+            ->will($this->returnValue([
                 $package1,
                 $package2,
-            )));
+            ]));
 
         $this->suggestedPackagesReporter->addPackage('a', 'b', 'c');
         $this->suggestedPackagesReporter->addPackage('source package', 'target', 'because reasons');
 
-        $this->io->expects($this->once())
-            ->method('writeError')
-            ->with('source package suggests installing target (because reasons)');
+        $this->io->expects([
+            ['text' => 'source package suggests:'],
+            ['text' => ' - target: because reasons'],
+            ['text' => ''],
+        ], true);
 
-        $this->suggestedPackagesReporter->output($repository);
+        $this->suggestedPackagesReporter->output(SuggestedPackagesReporter::MODE_BY_PACKAGE, $repository);
     }
 
     /**
      * @covers ::output
      */
-    public function testOutputNotGettingInstalledPackagesWhenNoSuggestions()
+    public function testOutputNotGettingInstalledPackagesWhenNoSuggestions(): void
     {
-        $repository = $this->getMockBuilder('Composer\Repository\RepositoryInterface')->getMock();
+        $repository = $this->getMockBuilder('Composer\Repository\InstalledRepository')->disableOriginalConstructor()->getMock();
         $repository->expects($this->exactly(0))
             ->method('getPackages');
 
-        $this->suggestedPackagesReporter->output($repository);
+        $this->suggestedPackagesReporter->output(SuggestedPackagesReporter::MODE_BY_PACKAGE, $repository);
     }
 
-    private function getSuggestedPackageArray()
+    /**
+     * @return array<string, string>
+     */
+    private function getSuggestedPackageArray(): array
     {
-        return array(
+        return [
             'source' => 'a',
             'target' => 'b',
             'reason' => 'c',
-        );
+        ];
     }
 
+    /**
+     * @return \Composer\Package\PackageInterface&\PHPUnit\Framework\MockObject\MockObject
+     */
     private function createPackageMock()
     {
         return $this->getMockBuilder('Composer\Package\Package')
-            ->setConstructorArgs(array(md5(mt_rand()), '1.0.0.0', '1.0.0'))
+            ->setConstructorArgs([bin2hex(random_bytes(5)), '1.0.0.0', '1.0.0'])
             ->getMock();
     }
 }

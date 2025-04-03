@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -15,190 +15,156 @@ namespace Composer\Test\Package\Loader;
 use Composer\Config;
 use Composer\Package\Loader\RootPackageLoader;
 use Composer\Package\BasePackage;
+use Composer\Package\RootAliasPackage;
+use Composer\Package\RootPackage;
 use Composer\Package\Version\VersionGuesser;
 use Composer\Semver\VersionParser;
-use PHPUnit\Framework\TestCase;
-use Prophecy\Argument;
+use Composer\Test\TestCase;
+use Composer\Util\ProcessExecutor;
 
 class RootPackageLoaderTest extends TestCase
 {
-    protected function loadPackage($data)
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @return RootPackage|RootAliasPackage
+     */
+    protected function loadPackage(array $data): \Composer\Package\PackageInterface
     {
-        $manager = $this->getMockBuilder('\\Composer\\Repository\\RepositoryManager')
+        $manager = $this->getMockBuilder('Composer\\Repository\\RepositoryManager')
             ->disableOriginalConstructor()
             ->getMock();
 
         $config = new Config;
-        $config->merge(array('repositories' => array('packagist' => false)));
+        $config->merge(['repositories' => ['packagist' => false]]);
+        $processExecutor = new ProcessExecutor();
+        $processExecutor->enableAsync();
+        $guesser = new VersionGuesser($config, $processExecutor, new VersionParser());
 
-        $loader = new RootPackageLoader($manager, $config);
+        $loader = new RootPackageLoader($manager, $config, null, $guesser);
 
         return $loader->load($data);
     }
 
-    public function testStabilityFlagsParsing()
+    public function testStabilityFlagsParsing(): void
     {
-        $package = $this->loadPackage(array(
-            'require' => array(
+        $package = $this->loadPackage([
+            'require' => [
                 'foo/bar' => '~2.1.0-beta2',
                 'bar/baz' => '1.0.x-dev as 1.2.0',
                 'qux/quux' => '1.0.*@rc',
                 'zux/complex' => '~1.0,>=1.0.2@dev',
                 'or/op' => '^2.0@dev || ^2.0@dev',
                 'multi/lowest-wins' => '^2.0@rc || >=3.0@dev , ~3.5@alpha',
-                'or/op/without-flags' => 'dev-master || 2.0 , ~3.5-alpha',
-                'or/op/without-flags2' => '3.0-beta || 2.0 , ~3.5-alpha',
-            ),
+                'or/op-without-flags' => 'dev-master || 2.0 , ~3.5-alpha',
+                'or/op-without-flags2' => '3.0-beta || 2.0 , ~3.5-alpha',
+            ],
             'minimum-stability' => 'alpha',
-        ));
+        ]);
 
-        $this->assertEquals('alpha', $package->getMinimumStability());
-        $this->assertEquals(array(
+        self::assertEquals('alpha', $package->getMinimumStability());
+        self::assertEquals([
             'bar/baz' => BasePackage::STABILITY_DEV,
             'qux/quux' => BasePackage::STABILITY_RC,
             'zux/complex' => BasePackage::STABILITY_DEV,
             'or/op' => BasePackage::STABILITY_DEV,
             'multi/lowest-wins' => BasePackage::STABILITY_DEV,
-            'or/op/without-flags' => BasePackage::STABILITY_DEV,
-            'or/op/without-flags2' => BasePackage::STABILITY_ALPHA,
-        ), $package->getStabilityFlags());
+            'or/op-without-flags' => BasePackage::STABILITY_DEV,
+            'or/op-without-flags2' => BasePackage::STABILITY_ALPHA,
+        ], $package->getStabilityFlags());
     }
 
-    public function testNoVersionIsVisibleInPrettyVersion()
+    public function testNoVersionIsVisibleInPrettyVersion(): void
     {
-        $manager = $this->getMockBuilder('\\Composer\\Repository\\RepositoryManager')
+        $manager = $this->getMockBuilder('Composer\\Repository\\RepositoryManager')
             ->disableOriginalConstructor()
             ->getMock()
-        ;
-
-        $executor = $this->getMockBuilder('\\Composer\\Util\\ProcessExecutor')
-            ->setMethods(array('execute'))
-            ->disableArgumentCloning()
-            ->disableOriginalConstructor()
-            ->getMock()
-        ;
-
-        $executor
-            ->expects($this->any())
-            ->method('execute')
-            ->willReturn(null)
         ;
 
         $config = new Config;
-        $config->merge(array('repositories' => array('packagist' => false)));
-        $loader = new RootPackageLoader($manager, $config, null, new VersionGuesser($config, $executor, new VersionParser()));
-        $package = $loader->load(array());
+        $config->merge(['repositories' => ['packagist' => false]]);
+        $loader = new RootPackageLoader($manager, $config, null, new VersionGuesser($config, $process = $this->getProcessExecutorMock(), new VersionParser()));
+        $process->expects([], false, ['return' => 1]);
 
-        $this->assertEquals("1.0.0.0", $package->getVersion());
-        $this->assertEquals("No version set (parsed as 1.0.0)", $package->getPrettyVersion());
+        $package = $loader->load([]);
+
+        self::assertEquals("1.0.0.0", $package->getVersion());
+        self::assertEquals(RootPackage::DEFAULT_PRETTY_VERSION, $package->getPrettyVersion());
     }
 
-    public function testPrettyVersionForRootPackageInVersionBranch()
+    public function testPrettyVersionForRootPackageInVersionBranch(): void
     {
         // see #6845
-        $manager = $this->prophesize('\\Composer\\Repository\\RepositoryManager');
-        $versionGuesser = $this->prophesize('\\Composer\\Package\\Version\\VersionGuesser');
-        $versionGuesser->guessVersion(Argument::cetera())
-            ->willReturn(array(
+        $manager = $this->getMockBuilder('Composer\\Repository\\RepositoryManager')->disableOriginalConstructor()->getMock();
+        $versionGuesser = $this->getMockBuilder('Composer\\Package\\Version\\VersionGuesser')->disableOriginalConstructor()->getMock();
+        $versionGuesser->expects($this->atLeastOnce())
+            ->method('guessVersion')
+            ->willReturn([
                 'name' => 'A',
                 'version' => '3.0.9999999.9999999-dev',
                 'pretty_version' => '3.0-dev',
                 'commit' => 'aabbccddee',
-            ));
+            ]);
         $config = new Config;
-        $config->merge(array('repositories' => array('packagist' => false)));
-        $loader = new RootPackageLoader($manager->reveal(), $config, null, $versionGuesser->reveal());
-        $package = $loader->load(array());
+        $config->merge(['repositories' => ['packagist' => false]]);
+        $loader = new RootPackageLoader($manager, $config, null, $versionGuesser);
+        $package = $loader->load([]);
 
-        $this->assertEquals('3.0-dev', $package->getPrettyVersion());
+        self::assertEquals('3.0-dev', $package->getPrettyVersion());
     }
 
-    public function testFeatureBranchPrettyVersion()
+    public function testFeatureBranchPrettyVersion(): void
     {
         if (!function_exists('proc_open')) {
             $this->markTestSkipped('proc_open() is not available');
         }
 
-        $manager = $this->getMockBuilder('\\Composer\\Repository\\RepositoryManager')
+        $manager = $this->getMockBuilder('Composer\\Repository\\RepositoryManager')
             ->disableOriginalConstructor()
             ->getMock()
         ;
 
-        $executor = $this->getMockBuilder('\\Composer\\Util\\ProcessExecutor')
-            ->setMethods(array('execute'))
-            ->disableArgumentCloning()
-            ->disableOriginalConstructor()
-            ->getMock()
-        ;
-
-        $self = $this;
-
-        $executor
-            ->expects($this->at(0))
-            ->method('execute')
-            ->willReturnCallback(function ($command, &$output) use ($self) {
-                $self->assertEquals('git branch --no-color --no-abbrev -v', $command);
-                $output = "* latest-production 38137d2f6c70e775e137b2d8a7a7d3eaebf7c7e5 Commit message\n  master 4f6ed96b0bc363d2aa4404c3412de1c011f67c66 Commit message\n";
-
-                return 0;
-            })
-        ;
-
-        $executor
-            ->expects($this->at(1))
-            ->method('execute')
-            ->willReturnCallback(function ($command, &$output) use ($self) {
-                $self->assertEquals('git rev-list master..latest-production', $command);
-                $output = "";
-
-                return 0;
-            })
-        ;
+        $process = $this->getProcessExecutorMock();
+        $process->expects([
+            [
+                'cmd' => ['git', 'branch', '-a', '--no-color', '--no-abbrev', '-v'],
+                'stdout' => "* latest-production 38137d2f6c70e775e137b2d8a7a7d3eaebf7c7e5 Commit message\n  master 4f6ed96b0bc363d2aa4404c3412de1c011f67c66 Commit message\n",
+            ],
+            ['cmd' => ['git', 'rev-list', 'master..latest-production']],
+        ], true);
 
         $config = new Config;
-        $config->merge(array('repositories' => array('packagist' => false)));
-        $loader = new RootPackageLoader($manager, $config, null, new VersionGuesser($config, $executor, new VersionParser()));
-        $package = $loader->load(array('require' => array('foo/bar' => 'self.version')));
+        $config->merge(['repositories' => ['packagist' => false]]);
+        $loader = new RootPackageLoader($manager, $config, null, new VersionGuesser($config, $process, new VersionParser()));
+        $package = $loader->load(['require' => ['foo/bar' => 'self.version']]);
 
-        $this->assertEquals("dev-master", $package->getPrettyVersion());
+        self::assertEquals("dev-master", $package->getPrettyVersion());
     }
 
-    public function testNonFeatureBranchPrettyVersion()
+    public function testNonFeatureBranchPrettyVersion(): void
     {
         if (!function_exists('proc_open')) {
             $this->markTestSkipped('proc_open() is not available');
         }
 
-        $manager = $this->getMockBuilder('\\Composer\\Repository\\RepositoryManager')
+        $manager = $this->getMockBuilder('Composer\\Repository\\RepositoryManager')
             ->disableOriginalConstructor()
             ->getMock()
         ;
 
-        $executor = $this->getMockBuilder('\\Composer\\Util\\ProcessExecutor')
-            ->setMethods(array('execute'))
-            ->disableArgumentCloning()
-            ->disableOriginalConstructor()
-            ->getMock()
-        ;
-
-        $self = $this;
-
-        $executor
-            ->expects($this->at(0))
-            ->method('execute')
-            ->willReturnCallback(function ($command, &$output) use ($self) {
-                $self->assertEquals('git branch --no-color --no-abbrev -v', $command);
-                $output = "* latest-production 38137d2f6c70e775e137b2d8a7a7d3eaebf7c7e5 Commit message\n  master 4f6ed96b0bc363d2aa4404c3412de1c011f67c66 Commit message\n";
-
-                return 0;
-            })
-        ;
+        $process = $this->getProcessExecutorMock();
+        $process->expects([
+            [
+                'cmd' => ['git', 'branch', '-a', '--no-color', '--no-abbrev', '-v'],
+                'stdout' => "* latest-production 38137d2f6c70e775e137b2d8a7a7d3eaebf7c7e5 Commit message\n  master 4f6ed96b0bc363d2aa4404c3412de1c011f67c66 Commit message\n",
+            ],
+        ], true);
 
         $config = new Config;
-        $config->merge(array('repositories' => array('packagist' => false)));
-        $loader = new RootPackageLoader($manager, $config, null, new VersionGuesser($config, $executor, new VersionParser()));
-        $package = $loader->load(array('require' => array('foo/bar' => 'self.version'), "non-feature-branches" => array("latest-.*")));
+        $config->merge(['repositories' => ['packagist' => false]]);
+        $loader = new RootPackageLoader($manager, $config, null, new VersionGuesser($config, $process, new VersionParser()));
+        $package = $loader->load(['require' => ['foo/bar' => 'self.version'], "non-feature-branches" => ["latest-.*"]]);
 
-        $this->assertEquals("dev-latest-production", $package->getPrettyVersion());
+        self::assertEquals("dev-latest-production", $package->getPrettyVersion());
     }
 }

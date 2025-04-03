@@ -21,7 +21,8 @@ Partial update from lock file should update everything to the state of the lock,
     "require": {
         "a/old": "*",
         "b/unstable": "*",
-        "c/uptodate": "*"
+        "c/uptodate": "*",
+        "e/newreq": "*"
     }
 }
 --LOCK--
@@ -42,8 +43,8 @@ Partial update from lock file should update everything to the state of the lock,
     },
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": [],
-    "platform-dev": []
+    "platform": {},
+    "platform-dev": {}
 }
 --INSTALLED--
 [
@@ -60,22 +61,20 @@ update b/unstable
         { "name": "a/old", "version": "1.0.0", "type": "library" },
         { "name": "b/unstable", "version": "1.0.0", "type": "library", "require": {"f/dependency": "1.*"} },
         { "name": "c/uptodate", "version": "1.0.0", "type": "library" },
-        { "name": "d/removed", "version": "1.0.0", "type": "library" },
         { "name": "e/newreq", "version": "1.0.0", "type": "library" },
         { "name": "f/dependency", "version": "1.0.0", "type": "library" }
     ],
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": [],
-    "platform-dev": []
+    "platform": {},
+    "platform-dev": {}
 }
 --EXPECT--
-Updating b/unstable (1.1.0-alpha) to b/unstable (1.0.0)
-Updating a/old (0.9.0) to a/old (1.0.0)
-Updating c/uptodate (2.0.0) to c/uptodate (1.0.0)
-Installing d/removed (1.0.0)
+Upgrading a/old (0.9.0 => 1.0.0)
+Downgrading b/unstable (1.1.0-alpha => 1.0.0)
+Downgrading c/uptodate (2.0.0 => 1.0.0)
 Installing e/newreq (1.0.0)

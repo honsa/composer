@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -12,51 +12,34 @@
 
 namespace Composer\Test\Util;
 
-use Composer\Downloader\TransportException;
 use Composer\Util\GitHub;
-use PHPUnit\Framework\TestCase;
-use RecursiveArrayIterator;
-use RecursiveIteratorIterator;
+use Composer\Test\TestCase;
 
 /**
  * @author Rob Bast <rob.bast@gmail.com>
  */
 class GitHubTest extends TestCase
 {
-    private $username = 'username';
+    /** @var string */
     private $password = 'password';
-    private $authcode = 'authcode';
+    /** @var string */
     private $message = 'mymessage';
+    /** @var string */
     private $origin = 'github.com';
-    private $token = 'githubtoken';
 
-    public function testUsernamePasswordAuthenticationFlow()
+    public function testUsernamePasswordAuthenticationFlow(): void
     {
         $io = $this->getIOMock();
-        $io
-            ->expects($this->at(0))
-            ->method('writeError')
-            ->with($this->message)
-        ;
-        $io
-            ->expects($this->once())
-            ->method('askAndHideAnswer')
-            ->with('Token (hidden): ')
-            ->willReturn($this->password)
-        ;
+        $io->expects([
+            ['text' => $this->message],
+            ['ask' => 'Token (hidden): ', 'reply' => $this->password],
+        ]);
 
-        $rfs = $this->getRemoteFilesystemMock();
-        $rfs
-            ->expects($this->once())
-            ->method('getContents')
-            ->with(
-                $this->equalTo($this->origin),
-                $this->equalTo(sprintf('https://api.%s/', $this->origin)),
-                $this->isFalse(),
-                $this->anything()
-            )
-            ->willReturn('{}')
-        ;
+        $httpDownloader = $this->getHttpDownloaderMock();
+        $httpDownloader->expects(
+            [['url' => sprintf('https://api.%s/', $this->origin), 'body' => '{}']],
+            true
+        );
 
         $config = $this->getConfigMock();
         $config
@@ -70,27 +53,23 @@ class GitHubTest extends TestCase
             ->willReturn($this->getConfJsonMock())
         ;
 
-        $github = new GitHub($io, $config, null, $rfs);
+        $github = new GitHub($io, $config, null, $httpDownloader);
 
-        $this->assertTrue($github->authorizeOAuthInteractively($this->origin, $this->message));
+        self::assertTrue($github->authorizeOAuthInteractively($this->origin, $this->message));
     }
 
-    public function testUsernamePasswordFailure()
+    public function testUsernamePasswordFailure(): void
     {
         $io = $this->getIOMock();
-        $io
-            ->expects($this->exactly(1))
-            ->method('askAndHideAnswer')
-            ->with('Token (hidden): ')
-            ->willReturn($this->password)
-        ;
+        $io->expects([
+            ['ask' => 'Token (hidden): ', 'reply' => $this->password],
+        ]);
 
-        $rfs = $this->getRemoteFilesystemMock();
-        $rfs
-            ->expects($this->exactly(1))
-            ->method('getContents')
-            ->will($this->throwException(new TransportException('', 401)))
-        ;
+        $httpDownloader = $this->getHttpDownloaderMock();
+        $httpDownloader->expects(
+            [['url' => sprintf('https://api.%s/', $this->origin), 'status' => 401]],
+            true
+        );
 
         $config = $this->getConfigMock();
         $config
@@ -99,38 +78,22 @@ class GitHubTest extends TestCase
             ->willReturn($this->getAuthJsonMock())
         ;
 
-        $github = new GitHub($io, $config, null, $rfs);
+        $github = new GitHub($io, $config, null, $httpDownloader);
 
-        $this->assertFalse($github->authorizeOAuthInteractively($this->origin));
+        self::assertFalse($github->authorizeOAuthInteractively($this->origin));
     }
 
-    private function getIOMock()
-    {
-        $io = $this
-            ->getMockBuilder('Composer\IO\ConsoleIO')
-            ->disableOriginalConstructor()
-            ->getMock()
-        ;
-
-        return $io;
-    }
-
+    /**
+     * @return \PHPUnit\Framework\MockObject\MockObject&\Composer\Config
+     */
     private function getConfigMock()
     {
         return $this->getMockBuilder('Composer\Config')->getMock();
     }
 
-    private function getRemoteFilesystemMock()
-    {
-        $rfs = $this
-            ->getMockBuilder('Composer\Util\RemoteFilesystem')
-            ->disableOriginalConstructor()
-            ->getMock()
-        ;
-
-        return $rfs;
-    }
-
+    /**
+     * @return \PHPUnit\Framework\MockObject\MockObject&\Composer\Config\JsonConfigSource
+     */
     private function getAuthJsonMock()
     {
         $authjson = $this
@@ -147,6 +110,9 @@ class GitHubTest extends TestCase
         return $authjson;
     }
 
+    /**
+     * @return \PHPUnit\Framework\MockObject\MockObject&\Composer\Config\JsonConfigSource
+     */
     private function getConfJsonMock()
     {
         $confjson = $this
@@ -161,17 +127,5 @@ class GitHubTest extends TestCase
         ;
 
         return $confjson;
-    }
-
-    public static function recursiveFind($array, $needle)
-    {
-        $iterator = new RecursiveArrayIterator($array);
-        $recursive = new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::SELF_FIRST);
-
-        foreach ($recursive as $key => $value) {
-            if ($key === $needle) {
-                return $value;
-            }
-        }
     }
 }

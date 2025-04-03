@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -14,14 +14,16 @@ namespace Composer\Test\Package\Loader;
 
 use Composer\Package\Loader\ValidatingArrayLoader;
 use Composer\Package\Loader\InvalidPackageException;
-use PHPUnit\Framework\TestCase;
+use Composer\Test\TestCase;
 
 class ValidatingArrayLoaderTest extends TestCase
 {
     /**
      * @dataProvider successProvider
+     *
+     * @param array<string, mixed> $config
      */
-    public function testLoadSuccess($config)
+    public function testLoadSuccess(array $config): void
     {
         $internalLoader = $this->getMockBuilder('Composer\Package\Loader\LoaderInterface')->getMock();
         $internalLoader
@@ -33,37 +35,37 @@ class ValidatingArrayLoaderTest extends TestCase
         $loader->load($config);
     }
 
-    public function successProvider()
+    public static function successProvider(): array
     {
-        return array(
-            array( // minimal
-                array(
+        return [
+            [ // minimal
+                [
                     'name' => 'foo/bar',
-                ),
-            ),
-            array( // complete
-                array(
+                ],
+            ],
+            [ // complete
+                [
                     'name' => 'foo/bar',
                     'description' => 'Foo bar',
                     'version' => '1.0.0',
                     'type' => 'library',
-                    'keywords' => array('a', 'b_c', 'D E', 'éîüø', '微信'),
+                    'keywords' => ['a', 'b_c', 'D E', 'éîüø', '微信'],
                     'homepage' => 'https://foo.com',
                     'time' => '2010-10-10T10:10:10+00:00',
-                    'license' => 'MIT',
-                    'authors' => array(
-                        array(
+                    'license' => ['MIT', 'WTFPL'],
+                    'authors' => [
+                        [
                             'name' => 'Alice',
                             'email' => 'alice@example.org',
                             'role' => 'Lead',
                             'homepage' => 'http://example.org',
-                        ),
-                        array(
+                        ],
+                        [
                             'name' => 'Bob',
                             'homepage' => '',
-                        ),
-                    ),
-                    'support' => array(
+                        ],
+                    ],
+                    'support' => [
                         'email' => 'mail@example.org',
                         'issues' => 'http://example.org/',
                         'forum' => 'http://example.org/',
@@ -72,105 +74,140 @@ class ValidatingArrayLoaderTest extends TestCase
                         'irc' => 'irc://example.org/example',
                         'rss' => 'http://example.org/rss',
                         'chat' => 'http://example.org/chat',
-                    ),
-                    'require' => array(
+                        'security' => 'https://example.org/security',
+                    ],
+                    'funding' => [
+                        [
+                            'type' => 'example',
+                            'url' => 'https://example.org/fund',
+                        ],
+                        [
+                            'url' => 'https://example.org/fund',
+                        ],
+                    ],
+                    'require' => [
                         'a/b' => '1.*',
                         'b/c' => '~2',
-                        'example' => '>2.0-dev,<2.4-dev',
-                    ),
-                    'require-dev' => array(
+                        'example/pkg' => '>2.0-dev,<2.4-dev',
+                        'composer-runtime-api' => '*',
+                    ],
+                    'require-dev' => [
                         'a/b' => '1.*',
                         'b/c' => '*',
-                        'example' => '>2.0-dev,<2.4-dev',
-                    ),
-                    'conflict' => array(
+                        'example/pkg' => '>2.0-dev,<2.4-dev',
+                    ],
+                    'conflict' => [
+                        'a/bx' => '1.*',
+                        'b/cx' => '>2.7',
+                        'example/pkgx' => '>2.0-dev,<2.4-dev',
+                    ],
+                    'replace' => [
                         'a/b' => '1.*',
-                        'b/c' => '>2.7',
-                        'example' => '>2.0-dev,<2.4-dev',
-                    ),
-                    'replace' => array(
+                        'example/pkg' => '>2.0-dev,<2.4-dev',
+                    ],
+                    'provide' => [
                         'a/b' => '1.*',
-                        'example' => '>2.0-dev,<2.4-dev',
-                    ),
-                    'provide' => array(
-                        'a/b' => '1.*',
-                        'example' => '>2.0-dev,<2.4-dev',
-                    ),
-                    'suggest' => array(
+                        'example/pkg' => '>2.0-dev,<2.4-dev',
+                    ],
+                    'suggest' => [
                         'foo/bar' => 'Foo bar is very useful',
-                    ),
-                    'autoload' => array(
-                        'psr-0' => array(
+                    ],
+                    'autoload' => [
+                        'psr-0' => [
                             'Foo\\Bar' => 'src/',
                             '' => 'fallback/libs/',
-                        ),
-                        'classmap' => array(
+                        ],
+                        'classmap' => [
                             'dir/',
                             'dir2/file.php',
-                        ),
-                        'files' => array(
+                        ],
+                        'files' => [
                             'functions.php',
-                        ),
-                    ),
-                    'include-path' => array(
+                        ],
+                    ],
+                    'include-path' => [
                         'lib/',
-                    ),
+                    ],
                     'target-dir' => 'Foo/Bar',
                     'minimum-stability' => 'dev',
-                    'repositories' => array(
-                        array(
+                    'repositories' => [
+                        [
                             'type' => 'composer',
                             'url' => 'https://repo.packagist.org/',
-                        ),
-                    ),
-                    'config' => array(
+                        ],
+                    ],
+                    'config' => [
                         'bin-dir' => 'bin',
                         'vendor-dir' => 'vendor',
                         'process-timeout' => 10000,
-                    ),
-                    'archive' => array(
-                        'exclude' => array('/foo/bar', 'baz', '!/foo/bar/baz'),
-                    ),
-                    'scripts' => array(
+                    ],
+                    'archive' => [
+                        'exclude' => ['/foo/bar', 'baz', '!/foo/bar/baz'],
+                    ],
+                    'scripts' => [
                         'post-update-cmd' => 'Foo\\Bar\\Baz::doSomething',
-                        'post-install-cmd' => array(
+                        'post-install-cmd' => [
                             'Foo\\Bar\\Baz::doSomething',
-                        ),
-                    ),
-                    'extra' => array(
-                        'random' => array('stuff' => array('deeply' => 'nested')),
-                        'branch-alias' => array(
+                        ],
+                    ],
+                    'extra' => [
+                        'random' => ['stuff' => ['deeply' => 'nested']],
+                        'branch-alias' => [
                             'dev-master' => '2.0-dev',
                             'dev-old' => '1.0.x-dev',
                             '3.x-dev' => '3.1.x-dev',
-                        ),
-                    ),
-                    'bin' => array(
+                        ],
+                    ],
+                    'bin' => [
                         'bin/foo',
                         'bin/bar',
-                    ),
-                    'transport-options' => array('ssl' => array('local_cert' => '/opt/certs/test.pem')),
-                ),
-            ),
-            array( // test licenses as array
-                array(
-                    'name' => 'foo/bar',
-                    'license' => array('MIT', 'WTFPL'),
-                ),
-            ),
-            array( // test bin as string
-                array(
+                    ],
+                    'transport-options' => ['ssl' => ['local_cert' => '/opt/certs/test.pem']],
+                ],
+            ],
+            [ // test bin as string
+                [
                     'name' => 'foo/bar',
                     'bin' => 'bin1',
-                ),
-            ),
-        );
+                ],
+            ],
+            [ // package name with dashes
+                [
+                    'name' => 'foo/bar-baz',
+                ],
+            ],
+            [ // package name with dashes
+                [
+                    'name' => 'foo/bar--baz',
+                ],
+            ],
+            [ // package name with dashes
+                [
+                    'name' => 'foo/b-ar--ba-z',
+                ],
+            ],
+            [ // package name with dashes
+                [
+                    'name' => 'npm-asset/angular--core',
+                ],
+            ],
+            [ // refs as int or string
+                [
+                    'name' => 'foo/bar',
+                    'source' => ['url' => 'https://example.org', 'reference' => 1234, 'type' => 'baz'],
+                    'dist' => ['url' => 'https://example.org', 'reference' => 'foobar', 'type' => 'baz'],
+                ],
+            ],
+        ];
     }
 
     /**
      * @dataProvider errorProvider
+     *
+     * @param array<string, mixed> $config
+     * @param string[]             $expectedErrors
      */
-    public function testLoadFailureThrowsException($config, $expectedErrors)
+    public function testLoadFailureThrowsException(array $config, array $expectedErrors): void
     {
         $internalLoader = $this->getMockBuilder('Composer\Package\Loader\LoaderInterface')->getMock();
         $loader = new ValidatingArrayLoader($internalLoader, true, null, ValidatingArrayLoader::CHECK_ALL);
@@ -181,14 +218,17 @@ class ValidatingArrayLoaderTest extends TestCase
             $errors = $e->getErrors();
             sort($expectedErrors);
             sort($errors);
-            $this->assertEquals($expectedErrors, $errors);
+            self::assertEquals($expectedErrors, $errors);
         }
     }
 
     /**
      * @dataProvider warningProvider
+     *
+     * @param array<string, mixed> $config
+     * @param string[]             $expectedWarnings
      */
-    public function testLoadWarnings($config, $expectedWarnings)
+    public function testLoadWarnings(array $config, array $expectedWarnings): void
     {
         $internalLoader = $this->getMockBuilder('Composer\Package\Loader\LoaderInterface')->getMock();
         $loader = new ValidatingArrayLoader($internalLoader, true, null, ValidatingArrayLoader::CHECK_ALL);
@@ -197,16 +237,20 @@ class ValidatingArrayLoaderTest extends TestCase
         $warnings = $loader->getWarnings();
         sort($expectedWarnings);
         sort($warnings);
-        $this->assertEquals($expectedWarnings, $warnings);
+        self::assertEquals($expectedWarnings, $warnings);
     }
 
     /**
      * @dataProvider warningProvider
+     *
+     * @param array<string, mixed> $config
+     * @param string[]             $expectedWarnings
+     * @param array<string, mixed>|null $expectedArray
      */
-    public function testLoadSkipsWarningDataWhenIgnoringErrors($config, $expectedWarnings, $mustCheck = true)
+    public function testLoadSkipsWarningDataWhenIgnoringErrors(array $config, array $expectedWarnings, bool $mustCheck = true, ?array $expectedArray = null): void
     {
         if (!$mustCheck) {
-            $this->assertTrue(true);
+            self::assertTrue(true); // @phpstan-ignore staticMethod.alreadyNarrowedType
 
             return;
         }
@@ -214,205 +258,324 @@ class ValidatingArrayLoaderTest extends TestCase
         $internalLoader
             ->expects($this->once())
             ->method('load')
-            ->with(array('name' => 'a/b'));
+            ->with($expectedArray ?? ['name' => 'a/b']);
 
         $loader = new ValidatingArrayLoader($internalLoader, true, null, ValidatingArrayLoader::CHECK_ALL);
         $config['name'] = 'a/b';
         $loader->load($config);
     }
 
-    public function errorProvider()
+    public static function errorProvider(): array
     {
-        return array(
-            array(
-                array(
-                    'name' => 'foo',
-                ),
-                array(
-                    'name : invalid value (foo), must match [A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*',
-                ),
-            ),
-            array(
-                array(
+        $invalidNames = [
+            'foo',
+            'foo/-bar-',
+            'foo/-bar',
+        ];
+        $invalidNaming = [];
+        foreach ($invalidNames as $invalidName) {
+            $invalidNaming[] = [
+                [
+                    'name' => $invalidName,
+                ],
+                [
+                    "name : $invalidName is invalid, it should have a vendor name, a forward slash, and a package name. The vendor and package name can be words separated by -, . or _. The complete name should match \"^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]?|-{0,2})[a-z0-9]+)*$\".",
+                ],
+            ];
+        }
+
+        $invalidNames = [
+            'fo--oo/bar',
+            'fo-oo/bar__baz',
+            'fo-oo/bar_.baz',
+            'foo/bar---baz',
+        ];
+        foreach ($invalidNames as $invalidName) {
+            $invalidNaming[] = [
+                [
+                    'name' => $invalidName,
+                ],
+                [
+                    "name : $invalidName is invalid, it should have a vendor name, a forward slash, and a package name. The vendor and package name can be words separated by -, . or _. The complete name should match \"^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]?|-{0,2})[a-z0-9]+)*$\".",
+                ],
+                false,
+            ];
+        }
+
+        return array_merge($invalidNaming, [
+            [
+                [
                     'name' => 'foo/bar',
                     'homepage' => 43,
-                ),
-                array(
+                ],
+                [
                     'homepage : should be a string, integer given',
-                ),
-            ),
-            array(
-                array(
+                ],
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'support' => array(
-                        'source' => array(),
-                    ),
-                ),
-                array(
+                    'support' => [
+                        'source' => [],
+                    ],
+                ],
+                [
                     'support.source : invalid value, must be a string',
-                ),
-            ),
-            array(
-                array(
+                ],
+            ],
+            [
+                [
+                    'name' => 'foo/bar.json',
+                ],
+                [
+                    'name : foo/bar.json is invalid, package names can not end in .json, consider renaming it or perhaps using a -json suffix instead.',
+                ],
+            ],
+            [
+                [
+                    'name' => 'com1/foo',
+                ],
+                [
+                    'name : com1/foo is reserved, package and vendor names can not match any of: nul, con, prn, aux, com1, com2, com3, com4, com5, com6, com7, com8, com9, lpt1, lpt2, lpt3, lpt4, lpt5, lpt6, lpt7, lpt8, lpt9.',
+                ],
+            ],
+            [
+                [
+                    'name' => 'Foo/Bar',
+                ],
+                [
+                    'name : Foo/Bar is invalid, it should not contain uppercase characters. We suggest using foo/bar instead.',
+                ],
+            ],
+            [
+                [
                     'name' => 'foo/bar',
                     'autoload' => 'strings',
-                ),
-                array(
+                ],
+                [
                     'autoload : should be an array, string given',
-                ),
-            ),
-            array(
-                array(
+                ],
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'autoload' => array(
-                        'psr0' => array(
+                    'autoload' => [
+                        'psr0' => [
                             'foo' => 'src',
-                        ),
-                    ),
-                ),
-                array(
+                        ],
+                    ],
+                ],
+                [
                     'autoload : invalid value (psr0), must be one of psr-0, psr-4, classmap, files, exclude-from-classmap',
-                ),
-            ),
-            array(
-                array(
+                ],
+            ],
+            [
+                [
                     'name' => 'foo/bar',
                     'transport-options' => 'test',
-                ),
-                array(
+                ],
+                [
                     'transport-options : should be an array, string given',
-                ),
-            ),
-        );
+                ],
+            ],
+            [
+                [
+                    'name' => 'foo/bar',
+                    'source' => ['url' => '--foo', 'reference' => ' --bar', 'type' => 'baz'],
+                    'dist' => ['url' => ' --foox', 'reference' => '--barx', 'type' => 'baz'],
+                ],
+                [
+                    'dist.reference : must not start with a "-", "--barx" given',
+                    'dist.url : must not start with a "-", " --foox" given',
+                    'source.reference : must not start with a "-", " --bar" given',
+                    'source.url : must not start with a "-", "--foo" given',
+                ],
+            ],
+            [
+                [
+                    'name' => 'foo/bar',
+                    'require' => ['foo/Bar' => '1.*'],
+                ],
+                [
+                    'require.foo/Bar : a package cannot set a require on itself',
+                ],
+            ],
+            [
+                [
+                    'name' => 'foo/bar',
+                    'source' => ['url' => 1],
+                    'dist' => ['url' => null],
+                ],
+                [
+                    'source.type : must be present',
+                    'source.url : should be a string, integer given',
+                    'source.reference : must be present',
+                    'dist.type : must be present',
+                    'dist.url : must be present',
+                ],
+            ],
+            [
+                [
+                    'name' => 'foo/bar',
+                    'replace' => ['acme/bar'],
+                ],
+                ['replace.0 : invalid version constraint (Could not parse version constraint acme/bar: Invalid version string "acme/bar")'],
+            ],
+            [
+                [
+                    'require' => ['acme/bar' => '^1.0']
+                ],
+                ['name : must be present'],
+            ]
+        ]);
     }
 
-    public function warningProvider()
+    public static function warningProvider(): array
     {
-        return array(
-            array(
-                array(
+        return [
+            [
+                [
                     'name' => 'foo/bar',
                     'homepage' => 'foo:bar',
-                ),
-                array(
+                ],
+                [
                     'homepage : invalid value (foo:bar), must be an http/https URL',
-                ),
-            ),
-            array(
-                array(
-                    'name' => 'foo/bar.json',
-                ),
-                array(
-                    'Deprecation warning: Your package name foo/bar.json is invalid, package names can not end in .json, consider renaming it or perhaps using a -json suffix instead. Make sure you fix this as Composer 2.0 will error.',
-                ),
-            ),
-            array(
-                array(
-                    'name' => 'com1/foo',
-                ),
-                array(
-                    'Deprecation warning: Your package name com1/foo is reserved, package and vendor names can not match any of: nul, con, prn, aux, com1, com2, com3, com4, com5, com6, com7, com8, com9, lpt1, lpt2, lpt3, lpt4, lpt5, lpt6, lpt7, lpt8, lpt9. Make sure you fix this as Composer 2.0 will error.',
-                ),
-            ),
-            array(
-                array(
-                    'name' => 'Foo/Bar',
-                ),
-                array(
-                    'Deprecation warning: Your package name Foo/Bar is invalid, it should not contain uppercase characters. We suggest using foo/bar instead. Make sure you fix this as Composer 2.0 will error.',
-                ),
-            ),
-            array(
-                array(
+                ],
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'support' => array(
+                    'support' => [
                         'source' => 'foo:bar',
                         'forum' => 'foo:bar',
                         'issues' => 'foo:bar',
                         'wiki' => 'foo:bar',
                         'chat' => 'foo:bar',
-                    ),
-                ),
-                array(
+                        'security' => 'foo:bar',
+                    ],
+                ],
+                [
                     'support.source : invalid value (foo:bar), must be an http/https URL',
                     'support.forum : invalid value (foo:bar), must be an http/https URL',
                     'support.issues : invalid value (foo:bar), must be an http/https URL',
                     'support.wiki : invalid value (foo:bar), must be an http/https URL',
                     'support.chat : invalid value (foo:bar), must be an http/https URL',
-                ),
-            ),
-            array(
-                array(
+                    'support.security : invalid value (foo:bar), must be an http/https URL',
+                ],
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'require' => array(
+                    'require' => [
                         'foo/baz' => '*',
                         'bar/baz' => '>=1.0',
-                        'bar/foo' => 'dev-master',
                         'bar/hacked' => '@stable',
                         'bar/woo' => '1.0.0',
-                    ),
-                ),
-                array(
+                    ],
+                ],
+                [
                     'require.foo/baz : unbound version constraints (*) should be avoided',
                     'require.bar/baz : unbound version constraints (>=1.0) should be avoided',
-                    'require.bar/foo : unbound version constraints (dev-master) should be avoided',
                     'require.bar/hacked : unbound version constraints (@stable) should be avoided',
                     'require.bar/woo : exact version constraints (1.0.0) should be avoided if the package follows semantic versioning',
-                ),
+                ],
                 false,
-            ),
-            array(
-                array(
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'require' => array(
-                        'Foo/Baz' => '^1.0',
-                    ),
-                ),
-                array(
-                    'Deprecation warning: require.Foo/Baz is invalid, it should not contain uppercase characters. Please use foo/baz instead. Make sure you fix this as Composer 2.0 will error.',
-                ),
+                    'require' => [
+                        'foo/baz' => '>1, <0.5',
+                        'bar/baz' => 'dev-main, >0.5',
+                    ],
+                ],
+                [
+                    'require.foo/baz : this version constraint cannot possibly match anything (>1, <0.5)',
+                    'require.bar/baz : this version constraint cannot possibly match anything (dev-main, >0.5)',
+                ],
                 false,
-            ),
-            array(
-                array(
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'require' => array(
+                    'require' => [
                         'bar/unstable' => '0.3.0',
-                    ),
-                ),
-                array(
+                    ],
+                ],
+                [
                     // using an exact version constraint for an unstable version should not trigger a warning
-                ),
+                ],
                 false,
-            ),
-            array(
-                array(
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'extra' => array(
-                        'branch-alias' => array(
+                    'extra' => [
+                        'branch-alias' => [
                             '5.x-dev' => '3.1.x-dev',
-                        ),
-                    ),
-                ),
-                array(
+                        ],
+                    ],
+                ],
+                [
                     'extra.branch-alias.5.x-dev : the target branch (3.1.x-dev) is not a valid numeric alias for this version',
-                ),
+                ],
                 false,
-            ),
-            array(
-                array(
+            ],
+            [
+                [
                     'name' => 'foo/bar',
-                    'extra' => array(
-                        'branch-alias' => array(
+                    'extra' => [
+                        'branch-alias' => [
                             '5.x-dev' => '3.1-dev',
-                        ),
-                    ),
-                ),
-                array(
+                        ],
+                    ],
+                ],
+                [
                     'extra.branch-alias.5.x-dev : the target branch (3.1-dev) is not a valid numeric alias for this version',
-                ),
+                ],
                 false,
-            ),
-        );
+            ],
+            [
+                [
+                    'name' => 'foo/bar',
+                    'require' => [
+                        'Foo/Baz' => '^1.0',
+                    ],
+                ],
+                [
+                    'require.Foo/Baz is invalid, it should not contain uppercase characters. Please use foo/baz instead.',
+                ],
+                false,
+            ],
+            [
+                [
+                    'name' => 'a/b',
+                    'license' => 'XXXXX',
+                ],
+                [
+                    'License "XXXXX" is not a valid SPDX license identifier, see https://spdx.org/licenses/ if you use an open license.'.PHP_EOL.
+                    'If the software is closed-source, you may use "proprietary" as license.',
+                ],
+                true,
+                [
+                    'name' => 'a/b',
+                    'license' => ['XXXXX'],
+                ]
+            ],
+            [
+                [
+                    'name' => 'a/b',
+                    'license' => [['author'=>'bar'], 'MIT'],
+                ],
+                [
+                    'License {"author":"bar"} should be a string.',
+                ],
+                true,
+                [
+                    'name' => 'a/b',
+                    'license' => ['MIT'],
+                ]
+            ],
+        ];
     }
 }

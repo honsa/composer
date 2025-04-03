@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -16,86 +16,86 @@ use Composer\Repository\Vcs\SvnDriver;
 use Composer\Config;
 use Composer\Test\TestCase;
 use Composer\Util\Filesystem;
-use Composer\Util\Platform;
+use Composer\Util\ProcessExecutor;
 
 class SvnDriverTest extends TestCase
 {
+    /**
+     * @var string
+     */
     protected $home;
+    /**
+     * @var Config
+     */
     protected $config;
 
-    public function setUp()
+    public function setUp(): void
     {
-        $this->home = $this->getUniqueTmpDirectory();
+        $this->home = self::getUniqueTmpDirectory();
         $this->config = new Config();
-        $this->config->merge(array(
-            'config' => array(
+        $this->config->merge([
+            'config' => [
                 'home' => $this->home,
-            ),
-        ));
+            ],
+        ]);
     }
 
-    public function tearDown()
+    protected function tearDown(): void
     {
+        parent::tearDown();
         $fs = new Filesystem();
         $fs->removeDirectory($this->home);
     }
 
-    /**
-     * @expectedException RuntimeException
-     */
-    public function testWrongCredentialsInUrl()
+    public function testWrongCredentialsInUrl(): void
     {
+        self::expectException('RuntimeException');
+        self::expectExceptionMessage("Repository https://till:secret@corp.svn.local/repo could not be processed, wrong credentials provided (svn: OPTIONS of 'https://corp.svn.local/repo': authorization failed: Could not authenticate to server: rejected Basic challenge (https://corp.svn.local/))");
+
         $console = $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
+        $httpDownloader = $this->getMockBuilder('Composer\Util\HttpDownloader')->disableOriginalConstructor()->getMock();
 
         $output = "svn: OPTIONS of 'https://corp.svn.local/repo':";
         $output .= " authorization failed: Could not authenticate to server:";
         $output .= " rejected Basic challenge (https://corp.svn.local/)";
 
-        $process = $this->getMockBuilder('Composer\Util\ProcessExecutor')->getMock();
-        $process->expects($this->at(1))
-            ->method('execute')
-            ->will($this->returnValue(1));
-        $process->expects($this->exactly(7))
-            ->method('getErrorOutput')
-            ->will($this->returnValue($output));
-        $process->expects($this->at(2))
-            ->method('execute')
-            ->will($this->returnValue(0));
+        $process = $this->getProcessExecutorMock();
+        $authedCommand = ['svn', 'ls', '--verbose', '--non-interactive', '--username', 'till', '--password', 'secret', '--', 'https://till:secret@corp.svn.local/repo/trunk'];
+        $process->expects([
+            ['cmd' => $authedCommand, 'return' => 1, 'stderr' => $output],
+            ['cmd' => $authedCommand, 'return' => 1, 'stderr' => $output],
+            ['cmd' => $authedCommand, 'return' => 1, 'stderr' => $output],
+            ['cmd' => $authedCommand, 'return' => 1, 'stderr' => $output],
+            ['cmd' => $authedCommand, 'return' => 1, 'stderr' => $output],
+            ['cmd' => $authedCommand, 'return' => 1, 'stderr' => $output],
+            ['cmd' => ['svn', '--version'], 'return' => 0, 'stdout' => '1.2.3'],
+        ], true);
 
-        $repoConfig = array(
+        $repoConfig = [
             'url' => 'https://till:secret@corp.svn.local/repo',
-        );
+        ];
 
-        $svn = new SvnDriver($repoConfig, $console, $this->config, $process);
+        $svn = new SvnDriver($repoConfig, $console, $this->config, $httpDownloader, $process);
         $svn->initialize();
     }
 
-    private function getCmd($cmd)
+    public static function supportProvider(): array
     {
-        if (Platform::isWindows()) {
-            return strtr($cmd, "'", '"');
-        }
-
-        return $cmd;
-    }
-
-    public static function supportProvider()
-    {
-        return array(
-            array('http://svn.apache.org', true),
-            array('https://svn.sf.net', true),
-            array('svn://example.org', true),
-            array('svn+ssh://example.org', true),
-        );
+        return [
+            ['http://svn.apache.org', true],
+            ['https://svn.sf.net', true],
+            ['svn://example.org', true],
+            ['svn+ssh://example.org', true],
+        ];
     }
 
     /**
      * @dataProvider supportProvider
      */
-    public function testSupport($url, $assertion)
+    public function testSupport(string $url, bool $assertion): void
     {
         $config = new Config();
         $result = SvnDriver::supports($this->getMockBuilder('Composer\IO\IOInterface')->getMock(), $config, $url);
-        $this->assertEquals($assertion, $result);
+        self::assertEquals($assertion, $result);
     }
 }

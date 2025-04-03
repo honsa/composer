@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -16,96 +16,96 @@ use Composer\DependencyResolver\GenericRule;
 use Composer\DependencyResolver\Rule;
 use Composer\DependencyResolver\RuleSet;
 use Composer\DependencyResolver\Pool;
-use Composer\Repository\ArrayRepository;
+use Composer\Package\Link;
+use Composer\Semver\Constraint\MatchAllConstraint;
 use Composer\Test\TestCase;
 
 class RuleTest extends TestCase
 {
-    protected $pool;
-
-    public function setUp()
+    public function testGetHash(): void
     {
-        $this->pool = new Pool;
+        $rule = new GenericRule([123], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+
+        $hash = unpack('ihash', (string) hash(\PHP_VERSION_ID > 80100 ? 'xxh3' : 'sha1', '123', true));
+        self::assertEquals($hash['hash'], $rule->getHash());
     }
 
-    public function testGetHash()
+    public function testEqualsForRulesWithDifferentHashes(): void
     {
-        $rule = new GenericRule(array(123), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([1, 2], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule2 = new GenericRule([1, 3], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
 
-        $hash = unpack('ihash', md5('123', true));
-        $this->assertEquals($hash['hash'], $rule->getHash());
+        self::assertFalse($rule->equals($rule2));
     }
 
-    public function testEqualsForRulesWithDifferentHashes()
+    public function testEqualsForRulesWithDifferLiteralsQuantity(): void
     {
-        $rule = new GenericRule(array(1, 2), Rule::RULE_JOB_INSTALL, null);
-        $rule2 = new GenericRule(array(1, 3), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([1, 12], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule2 = new GenericRule([1], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
 
-        $this->assertFalse($rule->equals($rule2));
+        self::assertFalse($rule->equals($rule2));
     }
 
-    public function testEqualsForRulesWithDifferLiteralsQuantity()
+    public function testEqualsForRulesWithSameLiterals(): void
     {
-        $rule = new GenericRule(array(1, 12), Rule::RULE_JOB_INSTALL, null);
-        $rule2 = new GenericRule(array(1), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([1, 12], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule2 = new GenericRule([1, 12], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
 
-        $this->assertFalse($rule->equals($rule2));
+        self::assertTrue($rule->equals($rule2));
     }
 
-    public function testEqualsForRulesWithSameLiterals()
+    public function testSetAndGetType(): void
     {
-        $rule = new GenericRule(array(1, 12), Rule::RULE_JOB_INSTALL, null);
-        $rule2 = new GenericRule(array(1, 12), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule->setType(RuleSet::TYPE_REQUEST);
 
-        $this->assertTrue($rule->equals($rule2));
+        self::assertEquals(RuleSet::TYPE_REQUEST, $rule->getType());
     }
 
-    public function testSetAndGetType()
+    public function testEnable(): void
     {
-        $rule = new GenericRule(array(), Rule::RULE_JOB_INSTALL, null);
-        $rule->setType(RuleSet::TYPE_JOB);
-
-        $this->assertEquals(RuleSet::TYPE_JOB, $rule->getType());
-    }
-
-    public function testEnable()
-    {
-        $rule = new GenericRule(array(), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
         $rule->disable();
         $rule->enable();
 
-        $this->assertTrue($rule->isEnabled());
-        $this->assertFalse($rule->isDisabled());
+        self::assertTrue($rule->isEnabled());
+        self::assertFalse($rule->isDisabled());
     }
 
-    public function testDisable()
+    public function testDisable(): void
     {
-        $rule = new GenericRule(array(), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
         $rule->enable();
         $rule->disable();
 
-        $this->assertTrue($rule->isDisabled());
-        $this->assertFalse($rule->isEnabled());
+        self::assertTrue($rule->isDisabled());
+        self::assertFalse($rule->isEnabled());
     }
 
-    public function testIsAssertions()
+    public function testIsAssertions(): void
     {
-        $rule = new GenericRule(array(1, 12), Rule::RULE_JOB_INSTALL, null);
-        $rule2 = new GenericRule(array(1), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([1, 12], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule2 = new GenericRule([1], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
 
-        $this->assertFalse($rule->isAssertion());
-        $this->assertTrue($rule2->isAssertion());
+        self::assertFalse($rule->isAssertion());
+        self::assertTrue($rule2->isAssertion());
     }
 
-    public function testPrettyString()
+    public function testPrettyString(): void
     {
-        $repo = new ArrayRepository;
-        $repo->addPackage($p1 = $this->getPackage('foo', '2.1'));
-        $repo->addPackage($p2 = $this->getPackage('baz', '1.1'));
-        $this->pool->addRepository($repo);
+        $pool = new Pool([
+            $p1 = self::getPackage('foo', '2.1'),
+            $p2 = self::getPackage('baz', '1.1'),
+        ]);
 
-        $rule = new GenericRule(array($p1->getId(), -$p2->getId()), Rule::RULE_JOB_INSTALL, null);
+        $repositorySetMock = $this->getMockBuilder('Composer\Repository\RepositorySet')->disableOriginalConstructor()->getMock();
+        $requestMock = $this->getMockBuilder('Composer\DependencyResolver\Request')->disableOriginalConstructor()->getMock();
 
-        $this->assertEquals('Install command rule (don\'t install baz 1.1|install foo 2.1)', $rule->getPrettyString($this->pool));
+        $emptyConstraint = new MatchAllConstraint();
+        $emptyConstraint->setPrettyString('*');
+
+        $rule = new GenericRule([$p1->getId(), -$p2->getId()], Rule::RULE_PACKAGE_REQUIRES, new Link('baz', 'foo', $emptyConstraint));
+
+        self::assertEquals('baz 1.1 relates to foo * -> satisfiable by foo[2.1].', $rule->getPrettyString($repositorySetMock, $requestMock, $pool, false));
     }
 }

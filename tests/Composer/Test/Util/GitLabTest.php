@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -12,55 +12,41 @@
 
 namespace Composer\Test\Util;
 
-use Composer\Downloader\TransportException;
 use Composer\Util\GitLab;
-use PHPUnit\Framework\TestCase;
+use Composer\Test\TestCase;
 
 /**
  * @author Jérôme Tamarelle <jerome@tamarelle.net>
  */
 class GitLabTest extends TestCase
 {
+    /** @var string */
     private $username = 'username';
+    /** @var string */
     private $password = 'password';
-    private $authcode = 'authcode';
+    /** @var string */
     private $message = 'mymessage';
+    /** @var string */
     private $origin = 'gitlab.com';
+    /** @var string */
     private $token = 'gitlabtoken';
+    /** @var string */
+    private $refreshtoken = 'gitlabrefreshtoken';
 
-    public function testUsernamePasswordAuthenticationFlow()
+    public function testUsernamePasswordAuthenticationFlow(): void
     {
         $io = $this->getIOMock();
-        $io
-            ->expects($this->at(0))
-            ->method('writeError')
-            ->with($this->message)
-        ;
-        $io
-            ->expects($this->once())
-            ->method('ask')
-            ->with('Username: ')
-            ->willReturn($this->username)
-        ;
-        $io
-            ->expects($this->once())
-            ->method('askAndHideAnswer')
-            ->with('Password: ')
-            ->willReturn($this->password)
-        ;
+        $io->expects([
+            ['text' => $this->message],
+            ['ask' => 'Username: ', 'reply' => $this->username],
+            ['ask' => 'Password: ', 'reply' => $this->password],
+        ]);
 
-        $rfs = $this->getRemoteFilesystemMock();
-        $rfs
-            ->expects($this->once())
-            ->method('getContents')
-            ->with(
-                $this->equalTo($this->origin),
-                $this->equalTo(sprintf('http://%s/oauth/token', $this->origin)),
-                $this->isFalse(),
-                $this->anything()
-            )
-            ->willReturn(sprintf('{"access_token": "%s", "token_type": "bearer", "expires_in": 7200}', $this->token))
-        ;
+        $httpDownloader = $this->getHttpDownloaderMock();
+        $httpDownloader->expects(
+            [['url' => sprintf('http://%s/oauth/token', $this->origin), 'body' => sprintf('{"access_token": "%s", "refresh_token": "%s", "token_type": "bearer", "expires_in": 7200, "created_at": 0}', $this->token, $this->refreshtoken)]],
+            true
+        );
 
         $config = $this->getConfigMock();
         $config
@@ -69,37 +55,40 @@ class GitLabTest extends TestCase
             ->willReturn($this->getAuthJsonMock())
         ;
 
-        $gitLab = new GitLab($io, $config, null, $rfs);
+        $gitLab = new GitLab($io, $config, null, $httpDownloader);
 
-        $this->assertTrue($gitLab->authorizeOAuthInteractively('http', $this->origin, $this->message));
+        self::assertTrue($gitLab->authorizeOAuthInteractively('http', $this->origin, $this->message));
     }
 
-    /**
-     * @expectedException \RuntimeException
-     * @expectedExceptionMessage Invalid GitLab credentials 5 times in a row, aborting.
-     */
-    public function testUsernamePasswordFailure()
+    public function testUsernamePasswordFailure(): void
     {
+        self::expectException('RuntimeException');
+        self::expectExceptionMessage('Invalid GitLab credentials 5 times in a row, aborting.');
         $io = $this->getIOMock();
-        $io
-            ->expects($this->exactly(5))
-            ->method('ask')
-            ->with('Username: ')
-            ->willReturn($this->username)
-        ;
-        $io
-            ->expects($this->exactly(5))
-            ->method('askAndHideAnswer')
-            ->with('Password: ')
-            ->willReturn($this->password)
-        ;
+        $io->expects([
+            ['ask' => 'Username: ', 'reply' => $this->username],
+            ['ask' => 'Password: ', 'reply' => $this->password],
+            ['ask' => 'Username: ', 'reply' => $this->username],
+            ['ask' => 'Password: ', 'reply' => $this->password],
+            ['ask' => 'Username: ', 'reply' => $this->username],
+            ['ask' => 'Password: ', 'reply' => $this->password],
+            ['ask' => 'Username: ', 'reply' => $this->username],
+            ['ask' => 'Password: ', 'reply' => $this->password],
+            ['ask' => 'Username: ', 'reply' => $this->username],
+            ['ask' => 'Password: ', 'reply' => $this->password],
+        ]);
 
-        $rfs = $this->getRemoteFilesystemMock();
-        $rfs
-            ->expects($this->exactly(5))
-            ->method('getContents')
-            ->will($this->throwException(new TransportException('', 401)))
-        ;
+        $httpDownloader = $this->getHttpDownloaderMock();
+        $httpDownloader->expects(
+            [
+                ['url' => 'https://gitlab.com/oauth/token', 'status' => 401, 'body' => '{}'],
+                ['url' => 'https://gitlab.com/oauth/token', 'status' => 401, 'body' => '{}'],
+                ['url' => 'https://gitlab.com/oauth/token', 'status' => 401, 'body' => '{}'],
+                ['url' => 'https://gitlab.com/oauth/token', 'status' => 401, 'body' => '{}'],
+                ['url' => 'https://gitlab.com/oauth/token', 'status' => 401, 'body' => '{}'],
+            ],
+            true
+        );
 
         $config = $this->getConfigMock();
         $config
@@ -108,38 +97,22 @@ class GitLabTest extends TestCase
             ->willReturn($this->getAuthJsonMock())
         ;
 
-        $gitLab = new GitLab($io, $config, null, $rfs);
+        $gitLab = new GitLab($io, $config, null, $httpDownloader);
 
         $gitLab->authorizeOAuthInteractively('https', $this->origin);
     }
 
-    private function getIOMock()
-    {
-        $io = $this
-            ->getMockBuilder('Composer\IO\ConsoleIO')
-            ->disableOriginalConstructor()
-            ->getMock()
-        ;
-
-        return $io;
-    }
-
+    /**
+     * @return \PHPUnit\Framework\MockObject\MockObject&\Composer\Config
+     */
     private function getConfigMock()
     {
         return $this->getMockBuilder('Composer\Config')->getMock();
     }
 
-    private function getRemoteFilesystemMock()
-    {
-        $rfs = $this
-            ->getMockBuilder('Composer\Util\RemoteFilesystem')
-            ->disableOriginalConstructor()
-            ->getMock()
-        ;
-
-        return $rfs;
-    }
-
+    /**
+     * @return \PHPUnit\Framework\MockObject\MockObject&\Composer\Config\JsonConfigSource
+     */
     private function getAuthJsonMock()
     {
         $authjson = $this

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -20,38 +20,58 @@ use Composer\Test\TestCase;
  */
 class ErrorHandlerTest extends TestCase
 {
+    public function setUp(): void
+    {
+        ErrorHandler::register();
+    }
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        restore_error_handler();
+    }
+
     /**
      * Test ErrorHandler handles notices
      */
-    public function testErrorHandlerCaptureNotice()
+    public function testErrorHandlerCaptureNotice(): void
     {
-        $this->setExpectedException('\ErrorException', 'Undefined index: baz');
+        if (\PHP_VERSION_ID >= 80000) {
+            self::expectException('\ErrorException');
+            self::expectExceptionMessage('Undefined array key "baz"');
+        } else {
+            self::expectException('\ErrorException');
+            self::expectExceptionMessage('Undefined index: baz');
+        }
 
-        ErrorHandler::register();
-
-        $array = array('foo' => 'bar');
+        $array = ['foo' => 'bar'];
+        // @phpstan-ignore offsetAccess.notFound, expr.resultUnused
         $array['baz'];
     }
 
     /**
      * Test ErrorHandler handles warnings
      */
-    public function testErrorHandlerCaptureWarning()
+    public function testErrorHandlerCaptureWarning(): void
     {
-        $this->setExpectedException('\ErrorException', 'array_merge');
+        if (\PHP_VERSION_ID >= 80000) {
+            self::expectException('TypeError');
+            self::expectExceptionMessage('array_merge');
+        } else {
+            self::expectException('ErrorException');
+            self::expectExceptionMessage('array_merge');
+        }
 
-        ErrorHandler::register();
-
-        array_merge(array(), 'string');
+        // @phpstan-ignore function.resultUnused, argument.type
+        array_merge([], 'string');
     }
 
     /**
      * Test ErrorHandler handles warnings
+     * @doesNotPerformAssertions
      */
-    public function testErrorHandlerRespectsAtOperator()
+    public function testErrorHandlerRespectsAtOperator(): void
     {
-        ErrorHandler::register();
-
         @trigger_error('test', E_USER_NOTICE);
     }
 }

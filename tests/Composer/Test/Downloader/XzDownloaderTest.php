@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -16,7 +16,8 @@ use Composer\Downloader\XzDownloader;
 use Composer\Test\TestCase;
 use Composer\Util\Filesystem;
 use Composer\Util\Platform;
-use Composer\Util\RemoteFilesystem;
+use Composer\Util\Loop;
+use Composer\Util\HttpDownloader;
 
 class XzDownloaderTest extends TestCase
 {
@@ -30,49 +31,42 @@ class XzDownloaderTest extends TestCase
      */
     private $testDir;
 
-    public function setUp()
+    public function setUp(): void
     {
         if (Platform::isWindows()) {
             $this->markTestSkipped('Skip test on Windows');
         }
-        $this->testDir = $this->getUniqueTmpDirectory();
+        $this->testDir = self::getUniqueTmpDirectory();
     }
 
-    public function tearDown()
+    protected function tearDown(): void
     {
+        if (Platform::isWindows()) {
+            return;
+        }
+        parent::tearDown();
         $this->fs = new Filesystem;
         $this->fs->removeDirectory($this->testDir);
     }
 
-    public function testErrorMessages()
+    public function testErrorMessages(): void
     {
-        $packageMock = $this->getMockBuilder('Composer\Package\PackageInterface')->getMock();
-        $packageMock->expects($this->any())
-            ->method('getDistUrl')
-            ->will($this->returnValue($distUrl = 'file://'.__FILE__))
-        ;
-        $packageMock->expects($this->any())
-            ->method('getDistUrls')
-            ->will($this->returnValue(array($distUrl)))
-        ;
-        $packageMock->expects($this->atLeastOnce())
-            ->method('getTransportOptions')
-            ->will($this->returnValue(array()))
-        ;
+        $package = self::getPackage();
+        $package->setDistUrl($distUrl = 'file://'.__FILE__);
 
         $io = $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
-        $config = $this->getMockBuilder('Composer\Config')->getMock();
-        $config->expects($this->any())
-            ->method('get')
-            ->with('vendor-dir')
-            ->will($this->returnValue($this->testDir));
-        $downloader = new XzDownloader($io, $config, null, null, null, new RemoteFilesystem($io));
+        $config = $this->getConfig(['vendor-dir' => $this->testDir]);
+        $downloader = new XzDownloader($io, $config, $httpDownloader = new HttpDownloader($io, $config), null, null, null);
 
         try {
-            $downloader->download($packageMock, $this->getUniqueTmpDirectory());
+            $loop = new Loop($httpDownloader);
+            $promise = $downloader->download($package, $this->testDir.'/install-path');
+            $loop->wait([$promise]);
+            $downloader->install($package, $this->testDir.'/install-path');
+
             $this->fail('Download of invalid tarball should throw an exception');
         } catch (\RuntimeException $e) {
-            $this->assertRegexp('/(File format not recognized|Unrecognized archive format)/i', $e->getMessage());
+            self::assertMatchesRegularExpression('/(File format not recognized|Unrecognized archive format)/i', $e->getMessage());
         }
     }
 }

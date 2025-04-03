@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -12,20 +12,26 @@
 
 namespace Composer\Test;
 
-use Composer\Test\TestCase;
+use Composer\Cache;
 use Composer\Util\Filesystem;
 
 class CacheTest extends TestCase
 {
+    /** @var array<\SplFileInfo> */
     private $files;
+    /** @var string */
     private $root;
+    /** @var \Symfony\Component\Finder\Finder&\PHPUnit\Framework\MockObject\MockObject */
     private $finder;
+    /** @var Filesystem&\PHPUnit\Framework\MockObject\MockObject */
+    private $filesystem;
+    /** @var Cache&\PHPUnit\Framework\MockObject\MockObject */
     private $cache;
 
-    public function setUp()
+    public function setUp(): void
     {
-        $this->root = $this->getUniqueTmpDirectory();
-        $this->files = array();
+        $this->root = self::getUniqueTmpDirectory();
+        $this->files = [];
         $zeros = str_repeat('0', 1000);
 
         for ($i = 0; $i < 4; $i++) {
@@ -34,11 +40,12 @@ class CacheTest extends TestCase
         }
 
         $this->finder = $this->getMockBuilder('Symfony\Component\Finder\Finder')->disableOriginalConstructor()->getMock();
+        $this->filesystem = $this->getMockBuilder('Composer\Util\Filesystem')->getMock();
 
         $io = $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
         $this->cache = $this->getMockBuilder('Composer\Cache')
-            ->setMethods(array('getFinder'))
-            ->setConstructorArgs(array($io, $this->root))
+            ->onlyMethods(['getFinder'])
+            ->setConstructorArgs([$io, $this->root])
             ->getMock();
         $this->cache
             ->expects($this->any())
@@ -46,15 +53,16 @@ class CacheTest extends TestCase
             ->will($this->returnValue($this->finder));
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
+        parent::tearDown();
         if (is_dir($this->root)) {
             $fs = new Filesystem;
             $fs->removeDirectory($this->root);
         }
     }
 
-    public function testRemoveOutdatedFiles()
+    public function testRemoveOutdatedFiles(): void
     {
         $outdated = array_slice($this->files, 1);
         $this->finder
@@ -69,12 +77,12 @@ class CacheTest extends TestCase
         $this->cache->gc(600, 1024 * 1024 * 1024);
 
         for ($i = 1; $i < 4; $i++) {
-            $this->assertFileNotExists("{$this->root}/cached.file{$i}.zip");
+            self::assertFileDoesNotExist("{$this->root}/cached.file{$i}.zip");
         }
-        $this->assertFileExists("{$this->root}/cached.file0.zip");
+        self::assertFileExists("{$this->root}/cached.file0.zip");
     }
 
-    public function testRemoveFilesWhenCacheIsTooLarge()
+    public function testRemoveFilesWhenCacheIsTooLarge(): void
     {
         $emptyFinder = $this->getMockBuilder('Symfony\Component\Finder\Finder')->disableOriginalConstructor()->getMock();
         $emptyFinder
@@ -98,22 +106,15 @@ class CacheTest extends TestCase
         $this->cache->gc(600, 1500);
 
         for ($i = 0; $i < 3; $i++) {
-            $this->assertFileNotExists("{$this->root}/cached.file{$i}.zip");
+            self::assertFileDoesNotExist("{$this->root}/cached.file{$i}.zip");
         }
-        $this->assertFileExists("{$this->root}/cached.file3.zip");
+        self::assertFileExists("{$this->root}/cached.file3.zip");
     }
 
-    public function testClearCache()
+    public function testClearCache(): void
     {
-        $this->finder
-            ->method('removeDirectory')
-            ->with($this->root)
-            ->willReturn(true);
-
-        $this->assertTrue($this->cache->clear());
-
-        for ($i = 0; $i < 3; $i++) {
-            $this->assertFileNotExists("{$this->root}/cached.file{$i}.zip");
-        }
+        $io = $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
+        $cache = new Cache($io, $this->root, 'a-z0-9.', $this->filesystem);
+        self::assertTrue($cache->clear());
     }
 }

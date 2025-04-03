@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -14,8 +14,14 @@ namespace Composer\Test\Plugin\Mock;
 
 class Capability implements \Composer\Plugin\Capability\Capability
 {
+    /**
+     * @var mixed[]
+     */
     public $args;
 
+    /**
+     * @param mixed[] $args
+     */
     public function __construct(array $args)
     {
         $this->args = $args;

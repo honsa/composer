@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -12,10 +12,11 @@
 
 namespace Composer\Test\Mock;
 
+use React\Promise\PromiseInterface;
 use Composer\Installer\InstallationManager;
-use Composer\Repository\RepositoryInterface;
 use Composer\Repository\InstalledRepositoryInterface;
 use Composer\Package\PackageInterface;
+use Composer\IO\IOInterface;
 use Composer\DependencyResolver\Operation\InstallOperation;
 use Composer\DependencyResolver\Operation\UpdateOperation;
 use Composer\DependencyResolver\Operation\UninstallOperation;
@@ -24,78 +25,135 @@ use Composer\DependencyResolver\Operation\MarkAliasUninstalledOperation;
 
 class InstallationManagerMock extends InstallationManager
 {
-    private $installed = array();
-    private $updated = array();
-    private $uninstalled = array();
-    private $trace = array();
+    /**
+     * @var PackageInterface[]
+     */
+    private $installed = [];
+    /**
+     * @var PackageInterface[][]
+     */
+    private $updated = [];
+    /**
+     * @var PackageInterface[]
+     */
+    private $uninstalled = [];
+    /**
+     * @var string[]
+     */
+    private $trace = [];
 
-    public function getInstallPath(PackageInterface $package)
+    public function __construct()
     {
-        return '';
     }
 
-    public function isPackageInstalled(InstalledRepositoryInterface $repo, PackageInterface $package)
+    public function execute(InstalledRepositoryInterface $repo, array $operations, $devMode = true, $runScripts = true, $downloadOnly = false): void
+    {
+        foreach ($operations as $operation) {
+            $method = $operation->getOperationType();
+            // skipping download() step here for tests
+            $this->{$method}($repo, $operation);
+        }
+    }
+
+    public function getInstallPath(PackageInterface $package): string
+    {
+        return 'vendor/'.$package->getName();
+    }
+
+    public function isPackageInstalled(InstalledRepositoryInterface $repo, PackageInterface $package): bool
     {
         return $repo->hasPackage($package);
     }
 
-    public function install(RepositoryInterface $repo, InstallOperation $operation)
+    /**
+     * @inheritDoc
+     */
+    public function install(InstalledRepositoryInterface $repo, InstallOperation $operation): ?PromiseInterface
     {
         $this->installed[] = $operation->getPackage();
-        $this->trace[] = (string) $operation;
+        $this->trace[] = strip_tags((string) $operation);
         $repo->addPackage(clone $operation->getPackage());
+
+        return null;
     }
 
-    public function update(RepositoryInterface $repo, UpdateOperation $operation)
+    /**
+     * @inheritDoc
+     */
+    public function update(InstalledRepositoryInterface $repo, UpdateOperation $operation): ?PromiseInterface
     {
-        $this->updated[] = array($operation->getInitialPackage(), $operation->getTargetPackage());
-        $this->trace[] = (string) $operation;
+        $this->updated[] = [$operation->getInitialPackage(), $operation->getTargetPackage()];
+        $this->trace[] = strip_tags((string) $operation);
         $repo->removePackage($operation->getInitialPackage());
-        $repo->addPackage(clone $operation->getTargetPackage());
+        if (!$repo->hasPackage($operation->getTargetPackage())) {
+            $repo->addPackage(clone $operation->getTargetPackage());
+        }
+
+        return null;
     }
 
-    public function uninstall(RepositoryInterface $repo, UninstallOperation $operation)
+    /**
+     * @inheritDoc
+     */
+    public function uninstall(InstalledRepositoryInterface $repo, UninstallOperation $operation): ?PromiseInterface
     {
         $this->uninstalled[] = $operation->getPackage();
-        $this->trace[] = (string) $operation;
+        $this->trace[] = strip_tags((string) $operation);
         $repo->removePackage($operation->getPackage());
+
+        return null;
     }
 
-    public function markAliasInstalled(RepositoryInterface $repo, MarkAliasInstalledOperation $operation)
+    public function markAliasInstalled(InstalledRepositoryInterface $repo, MarkAliasInstalledOperation $operation): void
     {
         $package = $operation->getPackage();
 
         $this->installed[] = $package;
-        $this->trace[] = (string) $operation;
+        $this->trace[] = strip_tags((string) $operation);
 
         parent::markAliasInstalled($repo, $operation);
     }
 
-    public function markAliasUninstalled(RepositoryInterface $repo, MarkAliasUninstalledOperation $operation)
+    public function markAliasUninstalled(InstalledRepositoryInterface $repo, MarkAliasUninstalledOperation $operation): void
     {
         $this->uninstalled[] = $operation->getPackage();
-        $this->trace[] = (string) $operation;
+        $this->trace[] = strip_tags((string) $operation);
 
         parent::markAliasUninstalled($repo, $operation);
     }
 
-    public function getTrace()
+    /** @return string[] */
+    public function getTrace(): array
     {
         return $this->trace;
     }
 
-    public function getInstalledPackages()
+    /** @return PackageInterface[] */
+    public function getInstalledPackages(): array
     {
         return $this->installed;
     }
 
-    public function getUpdatedPackages()
+    /** @return PackageInterface[][] */
+    public function getUpdatedPackages(): array
     {
         return $this->updated;
     }
 
-    public function getUninstalledPackages()
+    /** @return PackageInterface[] */
+    public function getUninstalledPackages(): array
     {
         return $this->uninstalled;
+    }
+
+    public function notifyInstalls(IOInterface $io): void
+    {
+        // noop
+    }
+
+    /** @return PackageInterface[] */
+    public function getInstalledPackagesByType(): array
+    {
+        return $this->installed;
     }
 }

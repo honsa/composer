@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -17,62 +17,65 @@ use Composer\DependencyResolver\Rule;
 use Composer\DependencyResolver\RuleSet;
 use Composer\DependencyResolver\RuleSetIterator;
 use Composer\DependencyResolver\Pool;
-use PHPUnit\Framework\TestCase;
+use Composer\Semver\Constraint\MatchAllConstraint;
+use Composer\Test\TestCase;
 
 class RuleSetIteratorTest extends TestCase
 {
+    /** @var array<RuleSet::TYPE_*, Rule[]> */
     protected $rules;
+    /** @var Pool */
     protected $pool;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->pool = new Pool;
+        $this->pool = new Pool();
 
-        $this->rules = array(
-            RuleSet::TYPE_JOB => array(
-                new GenericRule(array(), Rule::RULE_JOB_INSTALL, null),
-                new GenericRule(array(), Rule::RULE_JOB_INSTALL, null),
-            ),
-            RuleSet::TYPE_LEARNED => array(
-                new GenericRule(array(), Rule::RULE_INTERNAL_ALLOW_UPDATE, null),
-            ),
-            RuleSet::TYPE_PACKAGE => array(),
-        );
+        $this->rules = [
+            RuleSet::TYPE_REQUEST => [
+                new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]),
+                new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]),
+            ],
+            RuleSet::TYPE_LEARNED => [
+                new GenericRule([], Rule::RULE_LEARNED, 1),
+            ],
+            RuleSet::TYPE_PACKAGE => [],
+        ];
     }
 
-    public function testForeach()
+    public function testForeach(): void
     {
         $ruleSetIterator = new RuleSetIterator($this->rules);
 
-        $result = array();
+        $result = [];
         foreach ($ruleSetIterator as $rule) {
             $result[] = $rule;
         }
 
-        $expected = array(
-            $this->rules[RuleSet::TYPE_JOB][0],
-            $this->rules[RuleSet::TYPE_JOB][1],
+        $expected = [
+            $this->rules[RuleSet::TYPE_REQUEST][0],
+            $this->rules[RuleSet::TYPE_REQUEST][1],
             $this->rules[RuleSet::TYPE_LEARNED][0],
-        );
+        ];
 
-        $this->assertEquals($expected, $result);
+        self::assertEquals($expected, $result);
     }
 
-    public function testKeys()
+    public function testKeys(): void
     {
         $ruleSetIterator = new RuleSetIterator($this->rules);
 
-        $result = array();
+        $result = [];
         foreach ($ruleSetIterator as $key => $rule) {
             $result[] = $key;
         }
 
-        $expected = array(
-            RuleSet::TYPE_JOB,
-            RuleSet::TYPE_JOB,
+        $expected = [
+            RuleSet::TYPE_REQUEST,
+            RuleSet::TYPE_REQUEST,
             RuleSet::TYPE_LEARNED,
-        );
+        ];
 
-        $this->assertEquals($expected, $result);
+        self::assertEquals($expected, $result);
     }
 }

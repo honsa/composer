@@ -26,14 +26,14 @@ In this case the project name is `acme/hello-world`, where `acme` is the vendor
 name. Supplying a vendor name is mandatory.
 
 > **Note:** If you don't know what to use as a vendor name, your GitHub
-> username is usually a good bet. While package names are case insensitive, the
-> convention is all lowercase and dashes for word separation.
+> username is usually a good bet. Package names must be lowercase, and the
+> convention is to use dashes for word separation.
 
 ## Library Versioning
 
 In the vast majority of cases, you will be maintaining your library using some
 sort of version control system like git, svn, hg or fossil. In these cases,
-Composer infers versions from your VCS and you **should not** specify a version
+Composer infers versions from your VCS, and you **should not** specify a version
 in your `composer.json` file. (See the [Versions article](articles/versions.md)
 to learn about how Composer uses VCS branches and tags to resolve version
 constraints.)
@@ -54,7 +54,7 @@ file:
 ### VCS Versioning
 
 Composer uses your VCS's branch and tag features to resolve the version
-constraints you specify in your `require` field to specific sets of files.
+constraints you specify in your [`require`](04-schema.md#require) field to specific sets of files.
 When determining valid available versions, Composer looks at all of your tags
 and branches and translates their names into an internal list of options that
 it then matches against the version constraint you provided.
@@ -69,7 +69,7 @@ can help your team to always test against the same dependency versions.
 However, this lock file will not have any effect on other projects that depend
 on it. It only has an effect on the main project.
 
-If you do not want to commit the lock file and you are using git, add it to
+If you do not want to commit the lock file, and you are using git, add it to
 the `.gitignore`.
 
 ## Publishing to a VCS
@@ -142,12 +142,42 @@ Packagist is available automatically through Composer. Since
 can depend on it without having to specify any additional repositories.
 
 If we wanted to share `hello-world` with the world, we would publish it on
-Packagist as well. Doing so is really easy.
+Packagist as well.
 
-You simply visit [Packagist](https://packagist.org) and hit the "Submit"
+You visit [Packagist](https://packagist.org) and hit the "Submit"
 button. This will prompt you to sign up if you haven't already, and then
 allows you to submit the URL to your VCS repository, at which point Packagist
 will start crawling it. Once it is done, your package will be available to
 anyone!
+
+## Light-weight distribution packages
+
+Some useless information like the `.github` directory, or large examples, test
+data, etc. should typically not be included in distributed packages.
+
+The `.gitattributes` file is a git specific file like `.gitignore` also living
+at the root directory of your library. It overrides local and global
+configuration (`.git/config` and `~/.gitconfig` respectively) when present and
+tracked by git.
+
+Use `.gitattributes` to prevent unwanted files from bloating the zip
+distribution packages.
+
+```text
+// .gitattributes
+/demo export-ignore
+phpunit.xml.dist export-ignore
+/.github/ export-ignore
+```
+
+Test it by inspecting the zip file generated manually:
+
+```shell
+git archive branchName --format zip -o file.zip
+```
+
+> **Note:** Files would be still tracked by git just not included in the
+> zip distribution. This only works for packages installed from
+> dist (i.e. tagged releases) coming from GitHub, GitLab or Bitbucket.
 
 &larr; [Basic usage](01-basic-usage.md) |  [Command-line interface](03-cli.md) &rarr;

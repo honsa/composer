@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -13,26 +13,37 @@
 namespace Composer\Test\Package\Archiver;
 
 use Composer\Package\Archiver\ArchivableFilesFinder;
+use Composer\Pcre\Preg;
 use Composer\Test\TestCase;
 use Composer\Util\Filesystem;
 use Symfony\Component\Process\Process;
 
 class ArchivableFilesFinderTest extends TestCase
 {
+    /**
+     * @var string
+     */
     protected $sources;
+    /**
+     * @var ArchivableFilesFinder
+     */
     protected $finder;
+    /**
+     * @var Filesystem
+     */
     protected $fs;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $fs = new Filesystem;
         $this->fs = $fs;
 
         $this->sources = $fs->normalizePath(
-            $this->getUniqueTmpDirectory()
+            self::getUniqueTmpDirectory()
         );
 
-        $fileTree = array(
+        $fileTree = [
+            '.foo',
             'A/prefixA.foo',
             'A/prefixB.foo',
             'A/prefixC.foo',
@@ -76,7 +87,7 @@ class ArchivableFilesFinderTest extends TestCase
             '!important!.txt',
             '!important_too!.txt',
             '#weirdfile',
-        );
+        ];
 
         foreach ($fileTree as $relativePath) {
             $path = $this->sources.'/'.$relativePath;
@@ -85,25 +96,27 @@ class ArchivableFilesFinderTest extends TestCase
         }
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
+        parent::tearDown();
         $fs = new Filesystem;
         $fs->removeDirectory($this->sources);
     }
 
-    public function testManualExcludes()
+    public function testManualExcludes(): void
     {
-        $excludes = array(
+        $excludes = [
             'prefixB.foo',
             '!/prefixB.foo',
             '/prefixA.foo',
             'prefixC.*',
             '!*/*/*/prefixC.foo',
-        );
+            '.*',
+        ];
 
         $this->finder = new ArchivableFilesFinder($this->sources, $excludes);
 
-        $this->assertArchivableFiles(array(
+        self::assertArchivableFiles([
             '/!important!.txt',
             '/!important_too!.txt',
             '/#weirdfile',
@@ -140,55 +153,49 @@ class ArchivableFilesFinderTest extends TestCase
             '/prefixF.foo',
             '/toplevelA.foo',
             '/toplevelB.foo',
-        ));
+        ]);
     }
 
-    public function testGitExcludes()
+    public function testGitExcludes(): void
     {
         $this->skipIfNotExecutable('git');
 
-        file_put_contents($this->sources.'/.gitignore', implode("\n", array(
-            '# gitignore rules with comments and blank lines',
-            '',
-            'prefixE.foo',
-            '# and more',
-            '# comments',
-            '',
-            '!/prefixE.foo',
-            '/prefixD.foo',
-            'prefixF.*',
-            '!/*/*/prefixF.foo',
-            '',
-            'refixD.foo',
-            '/C',
-            'D/prefixA',
-            'E',
-            'F/',
-            'G/*',
-            'H/**',
-            'J/',
-            'parameters.yml',
-            '\!important!.txt',
-            '\#*',
-        )));
-
-        // git does not currently support negative git attributes
-        file_put_contents($this->sources.'/.gitattributes', implode("\n", array(
+        file_put_contents($this->sources.'/.gitattributes', implode("\n", [
             '',
             '# gitattributes rules with comments and blank lines',
             'prefixB.foo export-ignore',
-            //'!/prefixB.foo export-ignore',
             '/prefixA.foo export-ignore',
             'prefixC.* export-ignore',
-            //'!/*/*/prefixC.foo export-ignore',
-        )));
+            '',
+            'prefixE.foo export-ignore',
+            '# and more',
+            '# comments',
+            '',
+            '/prefixE.foo -export-ignore',
+            '/prefixD.foo export-ignore',
+            'prefixF.* export-ignore',
+            '/*/*/prefixF.foo -export-ignore',
+            '',
+            'refixD.foo export-ignore',
+            '/C export-ignore',
+            'D/prefixA export-ignore',
+            'E export-ignore',
+            'F/ export-ignore',
+            'G/* export-ignore',
+            'H/** export-ignore',
+            'J/ export-ignore',
+            'parameters.yml export-ignore',
+            '\!important!.txt export-ignore',
+            '\#* export-ignore',
+        ]));
 
-        $this->finder = new ArchivableFilesFinder($this->sources, array());
+        $this->finder = new ArchivableFilesFinder($this->sources, []);
 
-        $this->assertArchivableFiles($this->getArchivedFiles(
+        self::assertArchivableFiles($this->getArchivedFiles(
             'git init && '.
             'git config user.email "you@example.com" && '.
             'git config user.name "Your Name" && '.
+            'git config commit.gpgsign false && '.
             'git add .git* && '.
             'git commit -m "ignore rules" && '.
             'git add . && '.
@@ -197,58 +204,19 @@ class ArchivableFilesFinderTest extends TestCase
         ));
     }
 
-    public function testHgExcludes()
+    public function testSkipExcludes(): void
     {
-        $this->skipIfNotExecutable('hg');
-
-        file_put_contents($this->sources.'/.hgignore', implode("\n", array(
-            '# hgignore rules with comments, blank lines and syntax changes',
-            '',
-            'pre*A.foo',
-            'prefixE.foo',
-            '# and more',
-            '# comments',
-            '',
-            '^prefixD.foo',
-            'D/prefixA',
-            'parameters.yml',
-            '\!important!.txt',
-            'E',
-            'F/',
-            'syntax: glob',
-            'prefixF.*',
-            'B/*',
-            'H/**',
-        )));
-
-        $this->finder = new ArchivableFilesFinder($this->sources, array());
-
-        $expectedFiles = $this->getArchivedFiles(
-            'hg init && '.
-            'hg add && '.
-            'hg commit -m "init" && '.
-            'hg archive archive.zip'
-        );
-
-        // Remove .hg_archival.txt from the expectedFiles
-        $archiveKey = array_search('/.hg_archival.txt', $expectedFiles);
-        array_splice($expectedFiles, $archiveKey, 1);
-
-        $this->assertArchivableFiles($expectedFiles);
-    }
-
-    public function testSkipExcludes()
-    {
-        $excludes = array(
+        $excludes = [
             'prefixB.foo',
-        );
+        ];
 
         $this->finder = new ArchivableFilesFinder($this->sources, $excludes, true);
 
-        $this->assertArchivableFiles(array(
+        self::assertArchivableFiles([
             '/!important!.txt',
             '/!important_too!.txt',
             '/#weirdfile',
+            '/.foo',
             '/A/prefixA.foo',
             '/A/prefixB.foo',
             '/A/prefixC.foo',
@@ -289,15 +257,18 @@ class ArchivableFilesFinderTest extends TestCase
             '/prefixF.foo',
             '/toplevelA.foo',
             '/toplevelB.foo',
-        ));
+        ]);
     }
 
-    protected function getArchivableFiles()
+    /**
+     * @return string[]
+     */
+    protected function getArchivableFiles(): array
     {
-        $files = array();
+        $files = [];
         foreach ($this->finder as $file) {
             if (!$file->isDir()) {
-                $files[] = preg_replace('#^'.preg_quote($this->sources, '#').'#', '', $this->fs->normalizePath($file->getRealPath()));
+                $files[] = Preg::replace('#^'.preg_quote($this->sources, '#').'#', '', $this->fs->normalizePath($file->getRealPath()));
             }
         }
 
@@ -306,17 +277,20 @@ class ArchivableFilesFinderTest extends TestCase
         return $files;
     }
 
-    protected function getArchivedFiles($command)
+    /**
+     * @return string[]
+     */
+    protected function getArchivedFiles(string $command): array
     {
-        $process = new Process($command, $this->sources);
+        $process = Process::fromShellCommandline($command, $this->sources);
         $process->run();
 
         $archive = new \PharData($this->sources.'/archive.zip');
         $iterator = new \RecursiveIteratorIterator($archive);
 
-        $files = array();
+        $files = [];
         foreach ($iterator as $file) {
-            $files[] = preg_replace('#^phar://'.preg_quote($this->sources, '#').'/archive\.zip/archive#', '', $this->fs->normalizePath($file));
+            $files[] = Preg::replace('#^phar://'.preg_quote($this->sources, '#').'/archive\.zip/archive#', '', $this->fs->normalizePath((string) $file));
         }
 
         unset($archive, $iterator, $file);
@@ -325,10 +299,13 @@ class ArchivableFilesFinderTest extends TestCase
         return $files;
     }
 
-    protected function assertArchivableFiles($expectedFiles)
+    /**
+     * @param string[] $expectedFiles
+     */
+    protected function assertArchivableFiles(array $expectedFiles): void
     {
         $actualFiles = $this->getArchivableFiles();
 
-        $this->assertEquals($expectedFiles, $actualFiles);
+        self::assertEquals($expectedFiles, $actualFiles);
     }
 }

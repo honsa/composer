@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -12,38 +12,53 @@
 
 namespace Composer\Test\Package\Archiver;
 
+use Composer\IO\NullIO;
 use Composer\Factory;
 use Composer\Package\Archiver\ArchiveManager;
-use Composer\Package\PackageInterface;
+use Composer\Package\CompletePackage;
+use Composer\Util\Loop;
+use Composer\Test\Mock\FactoryMock;
+use Composer\Util\Platform;
+use Composer\Util\ProcessExecutor;
 
-class ArchiveManagerTest extends ArchiverTest
+class ArchiveManagerTest extends ArchiverTestCase
 {
     /**
      * @var ArchiveManager
      */
     protected $manager;
 
+    /**
+     * @var string
+     */
     protected $targetDir;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
         $factory = new Factory();
-        $this->manager = $factory->createArchiveManager($factory->createConfig());
+        $dm = $factory->createDownloadManager(
+            $io = new NullIO,
+            $config = FactoryMock::createConfig(),
+            $httpDownloader = $factory->createHttpDownloader($io, $config),
+            new ProcessExecutor($io)
+        );
+        $loop = new Loop($httpDownloader);
+        $this->manager = $factory->createArchiveManager($factory->createConfig(), $dm, $loop);
         $this->targetDir = $this->testDir.'/composer_archiver_tests';
     }
 
-    public function testUnknownFormat()
+    public function testUnknownFormat(): void
     {
-        $this->setExpectedException('RuntimeException');
+        self::expectException('RuntimeException');
 
         $package = $this->setupPackage();
 
         $this->manager->archive($package, '__unknown_format__', $this->targetDir);
     }
 
-    public function testArchiveTar()
+    public function testArchiveTar(): void
     {
         $this->skipIfNotExecutable('git');
 
@@ -54,15 +69,15 @@ class ArchiveManagerTest extends ArchiverTest
         $this->manager->archive($package, 'tar', $this->targetDir);
 
         $target = $this->getTargetName($package, 'tar');
-        $this->assertFileExists($target);
+        self::assertFileExists($target);
 
         $tmppath = sys_get_temp_dir().'/composer_archiver/'.$this->manager->getPackageFilename($package);
-        $this->assertFileNotExists($tmppath);
+        self::assertFileDoesNotExist($tmppath);
 
         unlink($target);
     }
 
-    public function testArchiveCustomFileName()
+    public function testArchiveCustomFileName(): void
     {
         $this->skipIfNotExecutable('git');
 
@@ -76,15 +91,39 @@ class ArchiveManagerTest extends ArchiverTest
 
         $target = $this->targetDir . '/' . $fileName . '.tar';
 
-        $this->assertFileExists($target);
+        self::assertFileExists($target);
 
         $tmppath = sys_get_temp_dir().'/composer_archiver/'.$this->manager->getPackageFilename($package);
-        $this->assertFileNotExists($tmppath);
+        self::assertFileDoesNotExist($tmppath);
 
         unlink($target);
     }
 
-    protected function getTargetName(PackageInterface $package, $format, $fileName = null)
+    public function testGetPackageFilenameParts(): void
+    {
+        $expected = [
+            'base' => 'archivertest-archivertest',
+            'version' => 'master',
+            'source_reference' => '4f26ae',
+        ];
+        $package = $this->setupPackage();
+
+        self::assertSame(
+            $expected,
+            $this->manager->getPackageFilenameParts($package)
+        );
+    }
+
+    public function testGetPackageFilename(): void
+    {
+        $package = $this->setupPackage();
+        self::assertSame(
+            'archivertest-archivertest-master-4f26ae',
+            $this->manager->getPackageFilename($package)
+        );
+    }
+
+    protected function getTargetName(CompletePackage $package, string $format, ?string $fileName = null): string
     {
         if (null === $fileName) {
             $packageName = $this->manager->getPackageFilename($package);
@@ -98,9 +137,9 @@ class ArchiveManagerTest extends ArchiverTest
     /**
      * Create local git repository to run tests against!
      */
-    protected function setupGitRepo()
+    protected function setupGitRepo(): void
     {
-        $currentWorkDir = getcwd();
+        $currentWorkDir = Platform::getCwd();
         chdir($this->testDir);
 
         $output = null;
@@ -110,7 +149,19 @@ class ArchiveManagerTest extends ArchiverTest
             throw new \RuntimeException('Could not init: '.$this->process->getErrorOutput());
         }
 
+        $result = $this->process->execute('git checkout -b master', $output, $this->testDir);
+        if ($result > 0) {
+            chdir($currentWorkDir);
+            throw new \RuntimeException('Could not checkout master branch: '.$this->process->getErrorOutput());
+        }
+
         $result = $this->process->execute('git config user.email "you@example.com"', $output, $this->testDir);
+        if ($result > 0) {
+            chdir($currentWorkDir);
+            throw new \RuntimeException('Could not config: '.$this->process->getErrorOutput());
+        }
+
+        $result = $this->process->execute('git config commit.gpgsign false', $output, $this->testDir);
         if ($result > 0) {
             chdir($currentWorkDir);
             throw new \RuntimeException('Could not config: '.$this->process->getErrorOutput());

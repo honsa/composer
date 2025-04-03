@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -13,31 +13,33 @@
 namespace Composer\Test\Json;
 
 use Composer\Json\JsonValidationException;
-use PHPUnit\Framework\TestCase;
+use Composer\Test\TestCase;
 
 class JsonValidationExceptionTest extends TestCase
 {
     /**
      * @dataProvider errorProvider
+     * @param string[] $errors
+     * @param string[] $expectedErrors
      */
-    public function testGetErrors($message, $errors)
+    public function testGetErrors(string $message, array $errors, string $expectedMessage, array $expectedErrors): void
     {
         $object = new JsonValidationException($message, $errors);
-        $this->assertEquals($message, $object->getMessage());
-        $this->assertEquals($errors, $object->getErrors());
+        self::assertSame($expectedMessage, $object->getMessage());
+        self::assertSame($expectedErrors, $object->getErrors());
     }
 
-    public function testGetErrorsWhenNoErrorsProvided()
+    public function testGetErrorsWhenNoErrorsProvided(): void
     {
         $object = new JsonValidationException('test message');
-        $this->assertEquals(array(), $object->getErrors());
+        self::assertEquals([], $object->getErrors());
     }
 
-    public function errorProvider()
+    public static function errorProvider(): array
     {
-        return array(
-            array('test message', array()),
-            array(null, null),
-        );
+        return [
+            ['test message', [], 'test message', []],
+            ['', ['foo'], '', ['foo']],
+        ];
     }
 }

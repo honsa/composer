@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -14,67 +14,52 @@ namespace Composer\Test\DependencyResolver;
 
 use Composer\DependencyResolver\Request;
 use Composer\Repository\ArrayRepository;
+use Composer\Semver\Constraint\MatchAllConstraint;
 use Composer\Test\TestCase;
 
 class RequestTest extends TestCase
 {
-    public function testRequestInstallAndRemove()
+    public function testRequestInstall(): void
     {
         $repo = new ArrayRepository;
-        $foo = $this->getPackage('foo', '1');
-        $bar = $this->getPackage('bar', '1');
-        $foobar = $this->getPackage('foobar', '1');
+        $foo = self::getPackage('foo', '1');
+        $bar = self::getPackage('bar', '1');
+        $foobar = self::getPackage('foobar', '1');
 
         $repo->addPackage($foo);
         $repo->addPackage($bar);
         $repo->addPackage($foobar);
 
         $request = new Request();
-        $request->install('foo');
-        $request->fix('bar');
-        $request->remove('foobar');
+        $request->requireName('foo');
 
-        $this->assertEquals(
-            array(
-                array('cmd' => 'install', 'packageName' => 'foo', 'constraint' => null, 'fixed' => false),
-                array('cmd' => 'install', 'packageName' => 'bar', 'constraint' => null, 'fixed' => true),
-                array('cmd' => 'remove', 'packageName' => 'foobar', 'constraint' => null, 'fixed' => false),
-            ),
-            $request->getJobs()
+        self::assertEquals(
+            [
+                'foo' => new MatchAllConstraint(),
+            ],
+            $request->getRequires()
         );
     }
 
-    public function testRequestInstallSamePackageFromDifferentRepositories()
+    public function testRequestInstallSamePackageFromDifferentRepositories(): void
     {
         $repo1 = new ArrayRepository;
         $repo2 = new ArrayRepository;
 
-        $foo1 = $this->getPackage('foo', '1');
-        $foo2 = $this->getPackage('foo', '1');
+        $foo1 = self::getPackage('foo', '1');
+        $foo2 = self::getPackage('foo', '1');
 
         $repo1->addPackage($foo1);
         $repo2->addPackage($foo2);
 
         $request = new Request();
-        $request->install('foo', $constraint = $this->getVersionConstraint('=', '1'));
+        $request->requireName('foo', $constraint = self::getVersionConstraint('=', '1'));
 
-        $this->assertEquals(
-            array(
-                    array('cmd' => 'install', 'packageName' => 'foo', 'constraint' => $constraint, 'fixed' => false),
-            ),
-            $request->getJobs()
-        );
-    }
-
-    public function testUpdateAll()
-    {
-        $request = new Request();
-
-        $request->updateAll();
-
-        $this->assertEquals(
-            array(array('cmd' => 'update-all')),
-            $request->getJobs()
+        self::assertEquals(
+            [
+                'foo' => $constraint,
+            ],
+            $request->getRequires()
         );
     }
 }

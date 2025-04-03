@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -13,14 +13,15 @@
 namespace Composer\Test\Mock;
 
 use Composer\Repository\InstalledFilesystemRepository;
+use Composer\Installer\InstallationManager;
 
 class InstalledFilesystemRepositoryMock extends InstalledFilesystemRepository
 {
-    public function reload()
+    public function reload(): void
     {
     }
 
-    public function write()
+    public function write($devMode, InstallationManager $installationManager): void
     {
     }
 }

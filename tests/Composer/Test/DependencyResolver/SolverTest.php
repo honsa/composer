@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -14,828 +14,957 @@ namespace Composer\Test\DependencyResolver;
 
 use Composer\IO\NullIO;
 use Composer\Repository\ArrayRepository;
+use Composer\Repository\LockArrayRepository;
 use Composer\DependencyResolver\DefaultPolicy;
-use Composer\DependencyResolver\Pool;
+use Composer\DependencyResolver\Operation\InstallOperation;
+use Composer\DependencyResolver\Operation\MarkAliasInstalledOperation;
+use Composer\DependencyResolver\Operation\MarkAliasUninstalledOperation;
+use Composer\DependencyResolver\Operation\UninstallOperation;
+use Composer\DependencyResolver\Operation\UpdateOperation;
 use Composer\DependencyResolver\Request;
 use Composer\DependencyResolver\Solver;
 use Composer\DependencyResolver\SolverProblemsException;
+use Composer\Package\PackageInterface;
 use Composer\Package\Link;
+use Composer\Repository\RepositorySet;
 use Composer\Test\TestCase;
 use Composer\Semver\Constraint\MultiConstraint;
+use Composer\Semver\Constraint\MatchAllConstraint;
+use Composer\DependencyResolver\Pool;
 
 class SolverTest extends TestCase
 {
-    protected $pool;
+    /** @var RepositorySet */
+    protected $repoSet;
+    /** @var ArrayRepository */
     protected $repo;
-    protected $repoInstalled;
+    /** @var LockArrayRepository */
+    protected $repoLocked;
+    /** @var Request */
     protected $request;
+    /** @var DefaultPolicy */
     protected $policy;
+    /** @var Solver|null */
     protected $solver;
+    /** @var Pool */
+    protected $pool;
 
-    public function setUp()
+    public function setUp(): void
     {
-        $this->pool = new Pool;
+        $this->repoSet = new RepositorySet();
         $this->repo = new ArrayRepository;
-        $this->repoInstalled = new ArrayRepository;
+        $this->repoLocked = new LockArrayRepository;
 
-        $this->request = new Request();
+        $this->request = new Request($this->repoLocked);
         $this->policy = new DefaultPolicy;
-        $this->solver = new Solver($this->policy, $this->pool, $this->repoInstalled, new NullIO());
     }
 
-    public function testSolverInstallSingle()
+    public function testSolverInstallSingle(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testSolverRemoveIfNotInstalled()
+    public function testSolverRemoveIfNotRequested(): void
     {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
         $this->reposComplete();
 
-        $this->checkSolverResult(array(
-            array('job' => 'remove', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'remove', 'package' => $packageA],
+        ]);
     }
 
-    public function testInstallNonExistingPackageFails()
+    public function testInstallNonExistingPackageFails(): void
     {
-        $this->repo->addPackage($this->getPackage('A', '1.0'));
+        $this->repo->addPackage(self::getPackage('A', '1.0'));
         $this->reposComplete();
 
-        $this->request->install('B', $this->getVersionConstraint('==', '1'));
+        $this->request->requireName('B', self::getVersionConstraint('==', '1'));
 
+        $this->createSolver();
         try {
             $transaction = $this->solver->solve($this->request);
             $this->fail('Unsolvable conflict did not result in exception.');
         } catch (SolverProblemsException $e) {
             $problems = $e->getProblems();
-            $this->assertCount(1, $problems);
-            $this->assertEquals(2, $e->getCode());
-            $this->assertEquals("\n    - The requested package b could not be found in any version, there may be a typo in the package name.", $problems[0]->getPrettyString());
+            self::assertCount(1, $problems);
+            self::assertEquals(2, $e->getCode());
+            self::assertEquals("\n    - Root composer.json requires b, it could not be found in any version, there may be a typo in the package name.", $problems[0]->getPrettyString($this->repoSet, $this->request, $this->pool, false));
         }
     }
 
-    public function testSolverInstallSamePackageFromDifferentRepositories()
+    public function testSolverInstallSamePackageFromDifferentRepositories(): void
     {
         $repo1 = new ArrayRepository;
         $repo2 = new ArrayRepository;
 
-        $repo1->addPackage($foo1 = $this->getPackage('foo', '1'));
-        $repo2->addPackage($foo2 = $this->getPackage('foo', '1'));
+        $repo1->addPackage($foo1 = self::getPackage('foo', '1'));
+        $repo2->addPackage($foo2 = self::getPackage('foo', '1'));
 
-        $this->pool->addRepository($this->repoInstalled);
-        $this->pool->addRepository($repo1);
-        $this->pool->addRepository($repo2);
+        $this->repoSet->addRepository($repo1);
+        $this->repoSet->addRepository($repo2);
 
-        $this->request->install('foo');
+        $this->request->requireName('foo');
 
-        $this->checkSolverResult(array(
-                array('job' => 'install', 'package' => $foo1),
-        ));
+        $this->checkSolverResult([
+                ['job' => 'install', 'package' => $foo1],
+        ]);
     }
 
-    public function testSolverInstallWithDeps()
+    public function testSolverInstallWithDeps(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($newPackageB = $this->getPackage('B', '1.1'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($newPackageB = self::getPackage('B', '1.1'));
 
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('<', '1.1'), 'requires')));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('<', '1.1'), Link::TYPE_REQUIRE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageB),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageB],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testSolverInstallHonoursNotEqualOperator()
+    public function testSolverInstallHonoursNotEqualOperator(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($newPackageB11 = $this->getPackage('B', '1.1'));
-        $this->repo->addPackage($newPackageB12 = $this->getPackage('B', '1.2'));
-        $this->repo->addPackage($newPackageB13 = $this->getPackage('B', '1.3'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($newPackageB11 = self::getPackage('B', '1.1'));
+        $this->repo->addPackage($newPackageB12 = self::getPackage('B', '1.2'));
+        $this->repo->addPackage($newPackageB13 = self::getPackage('B', '1.3'));
 
-        $packageA->setRequires(array(
-            'b' => new Link('A', 'B', new MultiConstraint(array(
-                $this->getVersionConstraint('<=', '1.3'),
-                $this->getVersionConstraint('<>', '1.3'),
-                $this->getVersionConstraint('!=', '1.2'),
-            )), 'requires'),
-        ));
+        $packageA->setRequires([
+            'b' => new Link('A', 'B', new MultiConstraint([
+                self::getVersionConstraint('<=', '1.3'),
+                self::getVersionConstraint('<>', '1.3'),
+                self::getVersionConstraint('!=', '1.2'),
+            ]), Link::TYPE_REQUIRE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $newPackageB11),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $newPackageB11],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testSolverInstallWithDepsInOrder()
+    public function testSolverInstallWithDepsInOrder(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($packageC = $this->getPackage('C', '1.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($packageC = self::getPackage('C', '1.0'));
 
-        $packageB->setRequires(array(
-            'a' => new Link('B', 'A', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-            'c' => new Link('B', 'C', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
-        $packageC->setRequires(array(
-            'a' => new Link('C', 'A', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
+        $packageB->setRequires([
+            'a' => new Link('B', 'A', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+            'c' => new Link('B', 'C', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
+        $packageC->setRequires([
+            'a' => new Link('C', 'A', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->install('B');
-        $this->request->install('C');
+        $this->request->requireName('A');
+        $this->request->requireName('B');
+        $this->request->requireName('C');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageA),
-            array('job' => 'install', 'package' => $packageC),
-            array('job' => 'install', 'package' => $packageB),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageA],
+            ['job' => 'install', 'package' => $packageC],
+            ['job' => 'install', 'package' => $packageB],
+        ]);
     }
 
-    public function testSolverInstallInstalled()
+    /**
+     * This test covers a particular behavior of the solver related to packages with the same name and version,
+     * but different requirements on other packages.
+     * Imagine you had multiple instances of packages (same name/version) with e.g. different dists depending on what other related package they were "built" for.
+     *
+     * An example people can probably relate to, so it was chosen here for better readability:
+     * - PHP versions 8.0.10 and 7.4.23 could be a package
+     * - ext-foobar 1.0.0 could be a package, but it must be built separately for each PHP x.y series
+     * - thus each of the ext-foobar packages lists the "PHP" package as a dependency
+     *
+     * This is not something that can happen with packages on e.g. Packagist, but custom installers with custom repositories might do something like this;
+     * in fact, some PaaSes do the exact thing above, installing binary builds of PHP and extensions as Composer packages with a custom installer in a separate step before the "userland" `composer install`.
+     *
+     * If version selectors are sufficiently permissive (e.g. "ourcustom/php":"*", "ourcustom/ext-foobar":"*"), then it may happen that the Solver won't pick the highest possible PHP version, as it has already settled on an "ext-foobar" (they're all the same version to the Solver, it doesn't know about the different requirements in each of the otherwise identical packages) if that was listed in "require" before "php".
+     * That's "unfixable", and not even broken, behavior (what if the "ext-foobar" has higher versions for the lower "PHP"? who wins then? any combination of the packages is "correct"), but it shouldn't randomly change.
+     * This test asserts this behavior to prevent regressions.
+     *
+     * CAUTION: IF THIS TEST EVER FAILS, SOLVER BEHAVIOR HAS CHANGED AND MAY BREAK DOWNSTREAM USERS
+     */
+    public function testSolverMultiPackageNameVersionResolutionDependsOnRequireOrder(): void
     {
-        $this->repoInstalled->addPackage($this->getPackage('A', '1.0'));
-        $this->reposComplete();
+        $this->repo->addPackage($php74 = self::getPackage('ourcustom/PHP', '7.4.23'));
+        $this->repo->addPackage($php80 = self::getPackage('ourcustom/PHP', '8.0.10'));
+        $this->repo->addPackage($extForPhp74 = self::getPackage('ourcustom/ext-foobar', '1.0'));
+        $this->repo->addPackage($extForPhp80 = self::getPackage('ourcustom/ext-foobar', '1.0'));
 
-        $this->request->install('A');
-
-        $this->checkSolverResult(array());
-    }
-
-    public function testSolverInstallInstalledWithAlternative()
-    {
-        $this->repo->addPackage($this->getPackage('A', '1.0'));
-        $this->repoInstalled->addPackage($this->getPackage('A', '1.0'));
-        $this->reposComplete();
-
-        $this->request->install('A');
-
-        $this->checkSolverResult(array());
-    }
-
-    public function testSolverRemoveSingle()
-    {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->reposComplete();
-
-        $this->request->remove('A');
-
-        $this->checkSolverResult(array(
-            array('job' => 'remove', 'package' => $packageA),
-        ));
-    }
-
-    public function testSolverRemoveUninstalled()
-    {
-        $this->repo->addPackage($this->getPackage('A', '1.0'));
-        $this->reposComplete();
-
-        $this->request->remove('A');
-
-        $this->checkSolverResult(array());
-    }
-
-    public function testSolverUpdateDoesOnlyUpdate()
-    {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repoInstalled->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($newPackageB = $this->getPackage('B', '1.1'));
-        $this->reposComplete();
-
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0.0.0'), 'requires')));
-
-        $this->request->install('A', $this->getVersionConstraint('=', '1.0.0.0'));
-        $this->request->install('B', $this->getVersionConstraint('=', '1.1.0.0'));
-        $this->request->update('A', $this->getVersionConstraint('=', '1.0.0.0'));
-        $this->request->update('B', $this->getVersionConstraint('=', '1.0.0.0'));
-
-        $this->checkSolverResult(array(
-            array('job' => 'update', 'from' => $packageB, 'to' => $newPackageB),
-        ));
-    }
-
-    public function testSolverUpdateSingle()
-    {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($newPackageA = $this->getPackage('A', '1.1'));
-        $this->reposComplete();
-
-        $this->request->install('A');
-        $this->request->update('A');
-
-        $this->checkSolverResult(array(
-            array('job' => 'update', 'from' => $packageA, 'to' => $newPackageA),
-        ));
-    }
-
-    public function testSolverUpdateAll()
-    {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repoInstalled->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($newPackageA = $this->getPackage('A', '1.1'));
-        $this->repo->addPackage($newPackageB = $this->getPackage('B', '1.1'));
-
-        $packageA->setRequires(array('b' => new Link('A', 'B', null, 'requires')));
-        $newPackageA->setRequires(array('b' => new Link('A', 'B', null, 'requires')));
+        $extForPhp74->setRequires([
+            'ourcustom/php' => new Link('ourcustom/ext-foobar', 'ourcustom/PHP', new MultiConstraint([
+                self::getVersionConstraint('>=', '7.4.0'),
+                self::getVersionConstraint('<', '7.5.0'),
+            ]), Link::TYPE_REQUIRE),
+        ]);
+        $extForPhp80->setRequires([
+            'ourcustom/php' => new Link('ourcustom/ext-foobar', 'ourcustom/PHP', new MultiConstraint([
+                self::getVersionConstraint('>=', '8.0.0'),
+                self::getVersionConstraint('<', '8.1.0'),
+            ]), Link::TYPE_REQUIRE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->updateAll();
+        $this->request->requireName('ourcustom/PHP');
+        $this->request->requireName('ourcustom/ext-foobar');
 
-        $this->checkSolverResult(array(
-            array('job' => 'update', 'from' => $packageB, 'to' => $newPackageB),
-            array('job' => 'update', 'from' => $packageA, 'to' => $newPackageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $php80],
+            ['job' => 'install', 'package' => $extForPhp80],
+        ]);
+
+        // now we flip the requirements around: we request "ext-foobar" before "php"
+        // because the ext-foobar package that requires php74 comes first in the repo, and the one that requires php80 second, the solver will pick the one for php74, and then, as it is a dependency, also php74
+        // this is because both packages have the same name and version; just their requirements differ
+        // and because no other constraint forces a particular version of package "php"
+        $this->request = new Request($this->repoLocked);
+        $this->request->requireName('ourcustom/ext-foobar');
+        $this->request->requireName('ourcustom/PHP');
+
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $php74],
+            ['job' => 'install', 'package' => $extForPhp74],
+        ]);
     }
 
-    public function testSolverUpdateCurrent()
+    /**
+     * This test is almost the same as above, except we're inserting the package with the requirement on the other package in a different order, asserting that if that is done, the order of requirements no longer matters
+     *
+     * CAUTION: IF THIS TEST EVER FAILS, SOLVER BEHAVIOR HAS CHANGED AND MAY BREAK DOWNSTREAM USERS
+     */
+    public function testSolverMultiPackageNameVersionResolutionIsIndependentOfRequireOrderIfOrderedDescendingByRequirement(): void
     {
-        $this->repoInstalled->addPackage($this->getPackage('A', '1.0'));
-        $this->repo->addPackage($this->getPackage('A', '1.0'));
+        $this->repo->addPackage($php74 = self::getPackage('ourcustom/PHP', '7.4'));
+        $this->repo->addPackage($php80 = self::getPackage('ourcustom/PHP', '8.0'));
+        $this->repo->addPackage($extForPhp80 = self::getPackage('ourcustom/ext-foobar', '1.0')); // note we are inserting this one into the repo first, unlike in the previous test
+        $this->repo->addPackage($extForPhp74 = self::getPackage('ourcustom/ext-foobar', '1.0'));
+
+        $extForPhp80->setRequires([
+            'ourcustom/php' => new Link('ourcustom/ext-foobar', 'ourcustom/PHP', new MultiConstraint([
+                self::getVersionConstraint('>=', '8.0.0'),
+                self::getVersionConstraint('<', '8.1.0'),
+            ]), Link::TYPE_REQUIRE),
+        ]);
+        $extForPhp74->setRequires([
+            'ourcustom/php' => new Link('ourcustom/ext-foobar', 'ourcustom/PHP', new MultiConstraint([
+                self::getVersionConstraint('>=', '7.4.0'),
+                self::getVersionConstraint('<', '7.5.0'),
+            ]), Link::TYPE_REQUIRE),
+        ]);
+
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->update('A');
+        $this->request->requireName('ourcustom/PHP');
+        $this->request->requireName('ourcustom/ext-foobar');
 
-        $this->checkSolverResult(array());
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $php80],
+            ['job' => 'install', 'package' => $extForPhp80],
+        ]);
+
+        // unlike in the previous test, the order of requirements no longer matters now
+        $this->request = new Request($this->repoLocked);
+        $this->request->requireName('ourcustom/ext-foobar');
+        $this->request->requireName('ourcustom/PHP');
+
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $php80],
+            ['job' => 'install', 'package' => $extForPhp80],
+        ]);
     }
 
-    public function testSolverUpdateOnlyUpdatesSelectedPackage()
+    public function testSolverFixLocked(): void
     {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repoInstalled->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($packageAnewer = $this->getPackage('A', '1.1'));
-        $this->repo->addPackage($packageBnewer = $this->getPackage('B', '1.1'));
-
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->install('B');
-        $this->request->update('A');
+        $this->request->fixPackage($packageA);
 
-        $this->checkSolverResult(array(
-            array('job' => 'update', 'from' => $packageA, 'to' => $packageAnewer),
-        ));
+        $this->checkSolverResult([]);
     }
 
-    public function testSolverUpdateConstrained()
+    public function testSolverFixLockedWithAlternative(): void
     {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($newPackageA = $this->getPackage('A', '1.2'));
-        $this->repo->addPackage($this->getPackage('A', '2.0'));
+        $this->repo->addPackage(self::getPackage('A', '1.0'));
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
         $this->reposComplete();
 
-        $this->request->install('A', $this->getVersionConstraint('<', '2.0.0.0'));
-        $this->request->update('A');
+        $this->request->fixPackage($packageA);
 
-        $this->checkSolverResult(array(array(
+        $this->checkSolverResult([]);
+    }
+
+    public function testSolverUpdateDoesOnlyUpdate(): void
+    {
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repoLocked->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($newPackageB = self::getPackage('B', '1.1'));
+        $this->reposComplete();
+
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0.0.0'), Link::TYPE_REQUIRE)]);
+
+        $this->request->fixPackage($packageA);
+        $this->request->requireName('B', self::getVersionConstraint('=', '1.1.0.0'));
+
+        $this->checkSolverResult([
+            ['job' => 'update', 'from' => $packageB, 'to' => $newPackageB],
+        ]);
+    }
+
+    public function testSolverUpdateSingle(): void
+    {
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($newPackageA = self::getPackage('A', '1.1'));
+        $this->reposComplete();
+
+        $this->request->requireName('A');
+
+        $this->checkSolverResult([
+            ['job' => 'update', 'from' => $packageA, 'to' => $newPackageA],
+        ]);
+    }
+
+    public function testSolverUpdateAll(): void
+    {
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repoLocked->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($newPackageA = self::getPackage('A', '1.1'));
+        $this->repo->addPackage($newPackageB = self::getPackage('B', '1.1'));
+
+        $packageA->setRequires(['b' => new Link('A', 'B', new MatchAllConstraint(), Link::TYPE_REQUIRE)]);
+        $newPackageA->setRequires(['b' => new Link('A', 'B', new MatchAllConstraint(), Link::TYPE_REQUIRE)]);
+
+        $this->reposComplete();
+
+        $this->request->requireName('A');
+
+        $this->checkSolverResult([
+            ['job' => 'update', 'from' => $packageB, 'to' => $newPackageB],
+            ['job' => 'update', 'from' => $packageA, 'to' => $newPackageA],
+        ]);
+    }
+
+    public function testSolverUpdateCurrent(): void
+    {
+        $this->repoLocked->addPackage(self::getPackage('A', '1.0'));
+        $this->repo->addPackage(self::getPackage('A', '1.0'));
+        $this->reposComplete();
+
+        $this->request->requireName('A');
+
+        $this->checkSolverResult([]);
+    }
+
+    public function testSolverUpdateOnlyUpdatesSelectedPackage(): void
+    {
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repoLocked->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($packageAnewer = self::getPackage('A', '1.1'));
+        $this->repo->addPackage($packageBnewer = self::getPackage('B', '1.1'));
+
+        $this->reposComplete();
+
+        $this->request->requireName('A');
+        $this->request->fixPackage($packageB);
+
+        $this->checkSolverResult([
+            ['job' => 'update', 'from' => $packageA, 'to' => $packageAnewer],
+        ]);
+    }
+
+    public function testSolverUpdateConstrained(): void
+    {
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($newPackageA = self::getPackage('A', '1.2'));
+        $this->repo->addPackage(self::getPackage('A', '2.0'));
+        $this->reposComplete();
+
+        $this->request->requireName('A', self::getVersionConstraint('<', '2.0.0.0'));
+
+        $this->checkSolverResult([[
             'job' => 'update',
             'from' => $packageA,
             'to' => $newPackageA,
-        )));
+        ]]);
     }
 
-    public function testSolverUpdateFullyConstrained()
+    public function testSolverUpdateFullyConstrained(): void
     {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($newPackageA = $this->getPackage('A', '1.2'));
-        $this->repo->addPackage($this->getPackage('A', '2.0'));
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($newPackageA = self::getPackage('A', '1.2'));
+        $this->repo->addPackage(self::getPackage('A', '2.0'));
         $this->reposComplete();
 
-        $this->request->install('A', $this->getVersionConstraint('<', '2.0.0.0'));
-        $this->request->update('A', $this->getVersionConstraint('=', '1.0.0.0'));
+        $this->request->requireName('A', self::getVersionConstraint('<', '2.0.0.0'));
 
-        $this->checkSolverResult(array(array(
+        $this->checkSolverResult([[
             'job' => 'update',
             'from' => $packageA,
             'to' => $newPackageA,
-        )));
+        ]]);
     }
 
-    public function testSolverUpdateFullyConstrainedPrunesInstalledPackages()
+    public function testSolverUpdateFullyConstrainedPrunesInstalledPackages(): void
     {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repoInstalled->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($newPackageA = $this->getPackage('A', '1.2'));
-        $this->repo->addPackage($this->getPackage('A', '2.0'));
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repoLocked->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($newPackageA = self::getPackage('A', '1.2'));
+        $this->repo->addPackage(self::getPackage('A', '2.0'));
         $this->reposComplete();
 
-        $this->request->install('A', $this->getVersionConstraint('<', '2.0.0.0'));
-        $this->request->update('A', $this->getVersionConstraint('=', '1.0.0.0'));
+        $this->request->requireName('A', self::getVersionConstraint('<', '2.0.0.0'));
 
-        $this->checkSolverResult(array(
-            array(
+        $this->checkSolverResult([
+            [
+                'job' => 'remove',
+                'package' => $packageB,
+            ],
+            [
                 'job' => 'update',
                 'from' => $packageA,
                 'to' => $newPackageA,
-            ),
-            array(
-                'job' => 'remove',
-                'package' => $packageB,
-            ),
-        ));
+            ],
+        ]);
     }
 
-    public function testSolverAllJobs()
+    public function testSolverAllJobs(): void
     {
-        $this->repoInstalled->addPackage($packageD = $this->getPackage('D', '1.0'));
-        $this->repoInstalled->addPackage($oldPackageC = $this->getPackage('C', '1.0'));
+        $this->repoLocked->addPackage($packageD = self::getPackage('D', '1.0'));
+        $this->repoLocked->addPackage($oldPackageC = self::getPackage('C', '1.0'));
 
-        $this->repo->addPackage($packageA = $this->getPackage('A', '2.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($newPackageB = $this->getPackage('B', '1.1'));
-        $this->repo->addPackage($packageC = $this->getPackage('C', '1.1'));
-        $this->repo->addPackage($this->getPackage('D', '1.0'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('<', '1.1'), 'requires')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '2.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($newPackageB = self::getPackage('B', '1.1'));
+        $this->repo->addPackage($packageC = self::getPackage('C', '1.1'));
+        $this->repo->addPackage(self::getPackage('D', '1.0'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('<', '1.1'), Link::TYPE_REQUIRE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->install('C');
-        $this->request->update('C');
-        $this->request->remove('D');
+        $this->request->requireName('A');
+        $this->request->requireName('C');
 
-        $this->checkSolverResult(array(
-            array('job' => 'update',  'from' => $oldPackageC, 'to' => $packageC),
-            array('job' => 'install', 'package' => $packageB),
-            array('job' => 'install', 'package' => $packageA),
-            array('job' => 'remove',  'package' => $packageD),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'remove',  'package' => $packageD],
+            ['job' => 'install', 'package' => $packageB],
+            ['job' => 'install', 'package' => $packageA],
+            ['job' => 'update',  'from' => $oldPackageC, 'to' => $packageC],
+        ]);
     }
 
-    public function testSolverThreeAlternativeRequireAndConflict()
+    public function testSolverThreeAlternativeRequireAndConflict(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '2.0'));
-        $this->repo->addPackage($middlePackageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($newPackageB = $this->getPackage('B', '1.1'));
-        $this->repo->addPackage($oldPackageB = $this->getPackage('B', '0.9'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('<', '1.1'), 'requires')));
-        $packageA->setConflicts(array('b' => new Link('A', 'B', $this->getVersionConstraint('<', '1.0'), 'conflicts')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '2.0'));
+        $this->repo->addPackage($middlePackageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($newPackageB = self::getPackage('B', '1.1'));
+        $this->repo->addPackage($oldPackageB = self::getPackage('B', '0.9'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('<', '1.1'), Link::TYPE_REQUIRE)]);
+        $packageA->setConflicts(['b' => new Link('A', 'B', self::getVersionConstraint('<', '1.0'), Link::TYPE_CONFLICT)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $middlePackageB),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $middlePackageB],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testSolverObsolete()
+    public function testSolverObsolete(): void
     {
-        $this->repoInstalled->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $packageB->setReplaces(array('a' => new Link('B', 'A', new MultiConstraint(array()))));
+        $this->repoLocked->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $packageB->setReplaces(['a' => new Link('B', 'A', new MatchAllConstraint())]);
 
         $this->reposComplete();
 
-        $this->request->install('B');
+        $this->request->requireName('B');
 
-        $this->checkSolverResult(array(
-            array('job' => 'update', 'from' => $packageA, 'to' => $packageB),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'remove', 'package' => $packageA],
+            ['job' => 'install', 'package' => $packageB],
+        ]);
     }
 
-    public function testInstallOneOfTwoAlternatives()
+    public function testInstallOneOfTwoAlternatives(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('A', '1.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('A', '1.0'));
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testInstallProvider()
+    public function testInstallProvider(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageQ = $this->getPackage('Q', '1.0'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires')));
-        $packageQ->setProvides(array('b' => new Link('Q', 'B', $this->getVersionConstraint('=', '1.0'), 'provides')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageQ = self::getPackage('Q', '1.0'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageQ->setProvides(['b' => new Link('Q', 'B', self::getVersionConstraint('=', '1.0'), Link::TYPE_PROVIDE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
         // must explicitly pick the provider, so error in this case
-        $this->setExpectedException('Composer\DependencyResolver\SolverProblemsException');
+        self::expectException('Composer\DependencyResolver\SolverProblemsException');
+        $this->createSolver();
         $this->solver->solve($this->request);
     }
 
-    public function testSkipReplacerOfExistingPackage()
+    public function testSkipReplacerOfExistingPackage(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageQ = $this->getPackage('Q', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires')));
-        $packageQ->setReplaces(array('b' => new Link('Q', 'B', $this->getVersionConstraint('>=', '1.0'), 'replaces')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageQ = self::getPackage('Q', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageQ->setReplaces(['b' => new Link('Q', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REPLACE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageB),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageB],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testNoInstallReplacerOfMissingPackage()
+    public function testNoInstallReplacerOfMissingPackage(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageQ = $this->getPackage('Q', '1.0'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires')));
-        $packageQ->setReplaces(array('b' => new Link('Q', 'B', $this->getVersionConstraint('>=', '1.0'), 'replaces')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageQ = self::getPackage('Q', '1.0'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageQ->setReplaces(['b' => new Link('Q', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REPLACE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->setExpectedException('Composer\DependencyResolver\SolverProblemsException');
+        self::expectException('Composer\DependencyResolver\SolverProblemsException');
+        $this->createSolver();
         $this->solver->solve($this->request);
     }
 
-    public function testSkipReplacedPackageIfReplacerIsSelected()
+    public function testSkipReplacedPackageIfReplacerIsSelected(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageQ = $this->getPackage('Q', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires')));
-        $packageQ->setReplaces(array('b' => new Link('Q', 'B', $this->getVersionConstraint('>=', '1.0'), 'replaces')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageQ = self::getPackage('Q', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageQ->setReplaces(['b' => new Link('Q', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REPLACE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->install('Q');
+        $this->request->requireName('A');
+        $this->request->requireName('Q');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageQ),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageQ],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testPickOlderIfNewerConflicts()
+    public function testPickOlderIfNewerConflicts(): void
     {
-        $this->repo->addPackage($packageX = $this->getPackage('X', '1.0'));
-        $packageX->setRequires(array(
-            'a' => new Link('X', 'A', $this->getVersionConstraint('>=', '2.0.0.0'), 'requires'),
-            'b' => new Link('X', 'B', $this->getVersionConstraint('>=', '2.0.0.0'), 'requires'),
-        ));
+        $this->repo->addPackage($packageX = self::getPackage('X', '1.0'));
+        $packageX->setRequires([
+            'a' => new Link('X', 'A', self::getVersionConstraint('>=', '2.0.0.0'), Link::TYPE_REQUIRE),
+            'b' => new Link('X', 'B', self::getVersionConstraint('>=', '2.0.0.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $this->repo->addPackage($packageA = $this->getPackage('A', '2.0.0'));
-        $this->repo->addPackage($newPackageA = $this->getPackage('A', '2.1.0'));
-        $this->repo->addPackage($newPackageB = $this->getPackage('B', '2.1.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '2.0.0'));
+        $this->repo->addPackage($newPackageA = self::getPackage('A', '2.1.0'));
+        $this->repo->addPackage($newPackageB = self::getPackage('B', '2.1.0'));
 
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '2.0.0.0'), 'requires')));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '2.0.0.0'), Link::TYPE_REQUIRE)]);
 
         // new package A depends on version of package B that does not exist
         // => new package A is not installable
-        $newPackageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '2.2.0.0'), 'requires')));
+        $newPackageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '2.2.0.0'), Link::TYPE_REQUIRE)]);
 
         // add a package S replacing both A and B, so that S and B or S and A cannot be simultaneously installed
         // but an alternative option for A and B both exists
         // this creates a more difficult so solve conflict
-        $this->repo->addPackage($packageS = $this->getPackage('S', '2.0.0'));
-        $packageS->setReplaces(array(
-            'a' => new Link('S', 'A', $this->getVersionConstraint('>=', '2.0.0.0'), 'replaces'),
-            'b' => new Link('S', 'B', $this->getVersionConstraint('>=', '2.0.0.0'), 'replaces'),
-        ));
+        $this->repo->addPackage($packageS = self::getPackage('S', '2.0.0'));
+        $packageS->setReplaces([
+            'a' => new Link('S', 'A', self::getVersionConstraint('>=', '2.0.0.0'), Link::TYPE_REPLACE),
+            'b' => new Link('S', 'B', self::getVersionConstraint('>=', '2.0.0.0'), Link::TYPE_REPLACE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('X');
+        $this->request->requireName('X');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $newPackageB),
-            array('job' => 'install', 'package' => $packageA),
-            array('job' => 'install', 'package' => $packageX),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $newPackageB],
+            ['job' => 'install', 'package' => $packageA],
+            ['job' => 'install', 'package' => $packageX],
+        ]);
     }
 
-    public function testInstallCircularRequire()
+    public function testInstallCircularRequire(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB1 = $this->getPackage('B', '0.9'));
-        $this->repo->addPackage($packageB2 = $this->getPackage('B', '1.1'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires')));
-        $packageB2->setRequires(array('a' => new Link('B', 'A', $this->getVersionConstraint('>=', '1.0'), 'requires')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB1 = self::getPackage('B', '0.9'));
+        $this->repo->addPackage($packageB2 = self::getPackage('B', '1.1'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageB2->setRequires(['a' => new Link('B', 'A', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageB2),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageB2],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testInstallAlternativeWithCircularRequire()
+    public function testInstallAlternativeWithCircularRequire(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($packageC = $this->getPackage('C', '1.0'));
-        $this->repo->addPackage($packageD = $this->getPackage('D', '1.0'));
-        $packageA->setRequires(array('b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires')));
-        $packageB->setRequires(array('virtual' => new Link('B', 'Virtual', $this->getVersionConstraint('>=', '1.0'), 'requires')));
-        $packageC->setProvides(array('virtual' => new Link('C', 'Virtual', $this->getVersionConstraint('==', '1.0'), 'provides')));
-        $packageD->setProvides(array('virtual' => new Link('D', 'Virtual', $this->getVersionConstraint('==', '1.0'), 'provides')));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($packageC = self::getPackage('C', '1.0'));
+        $this->repo->addPackage($packageD = self::getPackage('D', '1.0'));
+        $packageA->setRequires(['b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageB->setRequires(['virtual' => new Link('B', 'Virtual', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageC->setProvides(['virtual' => new Link('C', 'Virtual', self::getVersionConstraint('==', '1.0'), Link::TYPE_PROVIDE)]);
+        $packageD->setProvides(['virtual' => new Link('D', 'Virtual', self::getVersionConstraint('==', '1.0'), Link::TYPE_PROVIDE)]);
 
-        $packageC->setRequires(array('a' => new Link('C', 'A', $this->getVersionConstraint('==', '1.0'), 'requires')));
-        $packageD->setRequires(array('a' => new Link('D', 'A', $this->getVersionConstraint('==', '1.0'), 'requires')));
+        $packageC->setRequires(['a' => new Link('C', 'A', self::getVersionConstraint('==', '1.0'), Link::TYPE_REQUIRE)]);
+        $packageD->setRequires(['a' => new Link('D', 'A', self::getVersionConstraint('==', '1.0'), Link::TYPE_REQUIRE)]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->install('C');
+        $this->request->requireName('A');
+        $this->request->requireName('C');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageA),
-            array('job' => 'install', 'package' => $packageC),
-            array('job' => 'install', 'package' => $packageB),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageB],
+            ['job' => 'install', 'package' => $packageA],
+            ['job' => 'install', 'package' => $packageC],
+        ]);
     }
 
     /**
      * If a replacer D replaces B and C with C not otherwise available,
      * D must be installed instead of the original B.
      */
-    public function testUseReplacerIfNecessary()
+    public function testUseReplacerIfNecessary(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($packageD = $this->getPackage('D', '1.0'));
-        $this->repo->addPackage($packageD2 = $this->getPackage('D', '1.1'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($packageD = self::getPackage('D', '1.0'));
+        $this->repo->addPackage($packageD2 = self::getPackage('D', '1.1'));
 
-        $packageA->setRequires(array(
-            'b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-            'c' => new Link('A', 'C', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
+        $packageA->setRequires([
+            'b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+            'c' => new Link('A', 'C', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageD->setReplaces(array(
-            'b' => new Link('D', 'B', $this->getVersionConstraint('>=', '1.0'), 'replaces'),
-            'c' => new Link('D', 'C', $this->getVersionConstraint('>=', '1.0'), 'replaces'),
-        ));
+        $packageD->setReplaces([
+            'b' => new Link('D', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REPLACE),
+            'c' => new Link('D', 'C', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REPLACE),
+        ]);
 
-        $packageD2->setReplaces(array(
-            'b' => new Link('D', 'B', $this->getVersionConstraint('>=', '1.0'), 'replaces'),
-            'c' => new Link('D', 'C', $this->getVersionConstraint('>=', '1.0'), 'replaces'),
-        ));
+        $packageD2->setReplaces([
+            'b' => new Link('D', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REPLACE),
+            'c' => new Link('D', 'C', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REPLACE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->install('D');
+        $this->request->requireName('A');
+        $this->request->requireName('D');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageD2),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageD2],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
     }
 
-    public function testIssue265()
+    public function testIssue265(): void
     {
-        $this->repo->addPackage($packageA1 = $this->getPackage('A', '2.0.999999-dev'));
-        $this->repo->addPackage($packageA2 = $this->getPackage('A', '2.1-dev'));
-        $this->repo->addPackage($packageA3 = $this->getPackage('A', '2.2-dev'));
-        $this->repo->addPackage($packageB1 = $this->getPackage('B', '2.0.10'));
-        $this->repo->addPackage($packageB2 = $this->getPackage('B', '2.0.9'));
-        $this->repo->addPackage($packageC = $this->getPackage('C', '2.0-dev'));
-        $this->repo->addPackage($packageD = $this->getPackage('D', '2.0.9'));
+        $this->repo->addPackage($packageA1 = self::getPackage('A', '2.0.999999-dev'));
+        $this->repo->addPackage($packageA2 = self::getPackage('A', '2.1-dev'));
+        $this->repo->addPackage($packageA3 = self::getPackage('A', '2.2-dev'));
+        $this->repo->addPackage($packageB1 = self::getPackage('B', '2.0.10'));
+        $this->repo->addPackage($packageB2 = self::getPackage('B', '2.0.9'));
+        $this->repo->addPackage($packageC = self::getPackage('C', '2.0-dev'));
+        $this->repo->addPackage($packageD = self::getPackage('D', '2.0.9'));
 
-        $packageC->setRequires(array(
-            'a' => new Link('C', 'A', $this->getVersionConstraint('>=', '2.0'), 'requires'),
-            'd' => new Link('C', 'D', $this->getVersionConstraint('>=', '2.0'), 'requires'),
-        ));
+        $packageC->setRequires([
+            'a' => new Link('C', 'A', self::getVersionConstraint('>=', '2.0'), Link::TYPE_REQUIRE),
+            'd' => new Link('C', 'D', self::getVersionConstraint('>=', '2.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageD->setRequires(array(
-            'a' => new Link('D', 'A', $this->getVersionConstraint('>=', '2.1'), 'requires'),
-            'b' => new Link('D', 'B', $this->getVersionConstraint('>=', '2.0-dev'), 'requires'),
-        ));
+        $packageD->setRequires([
+            'a' => new Link('D', 'A', self::getVersionConstraint('>=', '2.1'), Link::TYPE_REQUIRE),
+            'b' => new Link('D', 'B', self::getVersionConstraint('>=', '2.0-dev'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageB1->setRequires(array('a' => new Link('B', 'A', $this->getVersionConstraint('==', '2.1.0.0-dev'), 'requires')));
-        $packageB2->setRequires(array('a' => new Link('B', 'A', $this->getVersionConstraint('==', '2.1.0.0-dev'), 'requires')));
+        $packageB1->setRequires(['a' => new Link('B', 'A', self::getVersionConstraint('==', '2.1.0.0-dev'), Link::TYPE_REQUIRE)]);
+        $packageB2->setRequires(['a' => new Link('B', 'A', self::getVersionConstraint('==', '2.1.0.0-dev'), Link::TYPE_REQUIRE)]);
 
-        $packageB2->setReplaces(array('d' => new Link('B', 'D', $this->getVersionConstraint('==', '2.0.9.0'), 'replaces')));
+        $packageB2->setReplaces(['d' => new Link('B', 'D', self::getVersionConstraint('==', '2.0.9.0'), Link::TYPE_REPLACE)]);
 
         $this->reposComplete();
 
-        $this->request->install('C', $this->getVersionConstraint('==', '2.0.0.0-dev'));
+        $this->request->requireName('C', self::getVersionConstraint('==', '2.0.0.0-dev'));
 
-        $this->setExpectedException('Composer\DependencyResolver\SolverProblemsException');
+        self::expectException('Composer\DependencyResolver\SolverProblemsException');
 
+        $this->createSolver();
         $this->solver->solve($this->request);
     }
 
-    public function testConflictResultEmpty()
+    public function testConflictResultEmpty(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $packageA->setConflicts(array(
-            'b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'conflicts'),
-        ));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $packageA->setConflicts([
+            'b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_CONFLICT),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
-        $this->request->install('B');
+        $emptyConstraint = new MatchAllConstraint();
+        $emptyConstraint->setPrettyString('*');
 
+        $this->request->requireName('A', $emptyConstraint);
+        $this->request->requireName('B', $emptyConstraint);
+
+        $this->createSolver();
         try {
             $transaction = $this->solver->solve($this->request);
             $this->fail('Unsolvable conflict did not result in exception.');
         } catch (SolverProblemsException $e) {
             $problems = $e->getProblems();
-            $this->assertCount(1, $problems);
+            self::assertCount(1, $problems);
 
             $msg = "\n";
             $msg .= "  Problem 1\n";
-            $msg .= "    - Installation request for a -> satisfiable by A[1.0].\n";
-            $msg .= "    - B 1.0 conflicts with A[1.0].\n";
-            $msg .= "    - Installation request for b -> satisfiable by B[1.0].\n";
-            $this->assertEquals($msg, $e->getMessage());
+            $msg .= "    - Root composer.json requires a * -> satisfiable by A[1.0].\n";
+            $msg .= "    - Root composer.json requires b * -> satisfiable by B[1.0].\n";
+            $msg .= "    - A 1.0 conflicts with B 1.0.\n";
+            self::assertEquals($msg, $e->getPrettyString($this->repoSet, $this->request, $this->pool, false));
         }
     }
 
-    public function testUnsatisfiableRequires()
+    public function testUnsatisfiableRequires(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
 
-        $packageA->setRequires(array(
-            'b' => new Link('A', 'B', $this->getVersionConstraint('>=', '2.0'), 'requires'),
-        ));
+        $packageA->setRequires([
+            'b' => new Link('A', 'B', self::getVersionConstraint('>=', '2.0'), Link::TYPE_REQUIRE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
 
+        $this->createSolver();
         try {
             $transaction = $this->solver->solve($this->request);
             $this->fail('Unsolvable conflict did not result in exception.');
         } catch (SolverProblemsException $e) {
             $problems = $e->getProblems();
-            $this->assertCount(1, $problems);
+            self::assertCount(1, $problems);
             // TODO assert problem properties
 
             $msg = "\n";
             $msg .= "  Problem 1\n";
-            $msg .= "    - Installation request for a -> satisfiable by A[1.0].\n";
-            $msg .= "    - A 1.0 requires b >= 2.0 -> no matching package found.\n\n";
-            $msg .= "Potential causes:\n";
-            $msg .= " - A typo in the package name\n";
-            $msg .= " - The package is not available in a stable-enough version according to your minimum-stability setting\n";
-            $msg .= "   see <https://getcomposer.org/doc/04-schema.md#minimum-stability> for more details.\n";
-            $msg .= " - It's a private package and you forgot to add a custom repository to find it\n\n";
-            $msg .= "Read <https://getcomposer.org/doc/articles/troubleshooting.md> for further common problems.";
-            $this->assertEquals($msg, $e->getMessage());
+            $msg .= "    - Root composer.json requires a * -> satisfiable by A[1.0].\n";
+            $msg .= "    - A 1.0 requires b >= 2.0 -> found B[1.0] but it does not match the constraint.\n";
+            self::assertEquals($msg, $e->getPrettyString($this->repoSet, $this->request, $this->pool, false));
         }
     }
 
-    public function testRequireMismatchException()
+    public function testRequireMismatchException(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($packageB2 = $this->getPackage('B', '0.9'));
-        $this->repo->addPackage($packageC = $this->getPackage('C', '1.0'));
-        $this->repo->addPackage($packageD = $this->getPackage('D', '1.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($packageB2 = self::getPackage('B', '0.9'));
+        $this->repo->addPackage($packageC = self::getPackage('C', '1.0'));
+        $this->repo->addPackage($packageD = self::getPackage('D', '1.0'));
 
-        $packageA->setRequires(array(
-            'b' => new Link('A', 'B', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
-        $packageB->setRequires(array(
-            'c' => new Link('B', 'C', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
-        $packageC->setRequires(array(
-            'd' => new Link('C', 'D', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
-        $packageD->setRequires(array(
-            'b' => new Link('D', 'B', $this->getVersionConstraint('<', '1.0'), 'requires'),
-        ));
+        $packageA->setRequires([
+            'b' => new Link('A', 'B', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
+        $packageB->setRequires([
+            'c' => new Link('B', 'C', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
+        $packageC->setRequires([
+            'd' => new Link('C', 'D', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
+        $packageD->setRequires([
+            'b' => new Link('D', 'B', self::getVersionConstraint('<', '1.0'), Link::TYPE_REQUIRE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $emptyConstraint = new MatchAllConstraint();
+        $emptyConstraint->setPrettyString('*');
 
+        $this->request->requireName('A', $emptyConstraint);
+
+        $this->createSolver();
         try {
             $transaction = $this->solver->solve($this->request);
             $this->fail('Unsolvable conflict did not result in exception.');
         } catch (SolverProblemsException $e) {
             $problems = $e->getProblems();
-            $this->assertCount(1, $problems);
+            self::assertCount(1, $problems);
 
             $msg = "\n";
             $msg .= "  Problem 1\n";
+            $msg .= "    - Root composer.json requires a * -> satisfiable by A[1.0].\n";
+            $msg .= "    - A 1.0 requires b >= 1.0 -> satisfiable by B[1.0].\n";
+            $msg .= "    - B 1.0 requires c >= 1.0 -> satisfiable by C[1.0].\n";
             $msg .= "    - C 1.0 requires d >= 1.0 -> satisfiable by D[1.0].\n";
             $msg .= "    - D 1.0 requires b < 1.0 -> satisfiable by B[0.9].\n";
-            $msg .= "    - B 1.0 requires c >= 1.0 -> satisfiable by C[1.0].\n";
-            $msg .= "    - Can only install one of: B[0.9, 1.0].\n";
-            $msg .= "    - A 1.0 requires b >= 1.0 -> satisfiable by B[1.0].\n";
-            $msg .= "    - Installation request for a -> satisfiable by A[1.0].\n";
-            $this->assertEquals($msg, $e->getMessage());
+            $msg .= "    - You can only install one version of a package, so only one of these can be installed: B[0.9, 1.0].\n";
+            self::assertEquals($msg, $e->getPrettyString($this->repoSet, $this->request, $this->pool, false));
         }
     }
 
-    public function testLearnLiteralsWithSortedRuleLiterals()
+    public function testLearnLiteralsWithSortedRuleLiterals(): void
     {
-        $this->repo->addPackage($packageTwig2 = $this->getPackage('twig/twig', '2.0'));
-        $this->repo->addPackage($packageTwig16 = $this->getPackage('twig/twig', '1.6'));
-        $this->repo->addPackage($packageTwig15 = $this->getPackage('twig/twig', '1.5'));
-        $this->repo->addPackage($packageSymfony = $this->getPackage('symfony/symfony', '2.0'));
-        $this->repo->addPackage($packageTwigBridge = $this->getPackage('symfony/twig-bridge', '2.0'));
+        $this->repo->addPackage($packageTwig2 = self::getPackage('twig/twig', '2.0'));
+        $this->repo->addPackage($packageTwig16 = self::getPackage('twig/twig', '1.6'));
+        $this->repo->addPackage($packageTwig15 = self::getPackage('twig/twig', '1.5'));
+        $this->repo->addPackage($packageSymfony = self::getPackage('symfony/symfony', '2.0'));
+        $this->repo->addPackage($packageTwigBridge = self::getPackage('symfony/twig-bridge', '2.0'));
 
-        $packageTwigBridge->setRequires(array(
-            'twig/twig' => new Link('symfony/twig-bridge', 'twig/twig', $this->getVersionConstraint('<', '2.0'), 'requires'),
-        ));
+        $packageTwigBridge->setRequires([
+            'twig/twig' => new Link('symfony/twig-bridge', 'twig/twig', self::getVersionConstraint('<', '2.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageSymfony->setReplaces(array(
-            'symfony/twig-bridge' => new Link('symfony/symfony', 'symfony/twig-bridge', $this->getVersionConstraint('==', '2.0'), 'replaces'),
-        ));
+        $packageSymfony->setReplaces([
+            'symfony/twig-bridge' => new Link('symfony/symfony', 'symfony/twig-bridge', self::getVersionConstraint('==', '2.0'), Link::TYPE_REPLACE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('symfony/twig-bridge');
-        $this->request->install('twig/twig');
+        $this->request->requireName('symfony/twig-bridge');
+        $this->request->requireName('twig/twig');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageTwig16),
-            array('job' => 'install', 'package' => $packageTwigBridge),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageTwig16],
+            ['job' => 'install', 'package' => $packageTwigBridge],
+        ]);
     }
 
-    public function testInstallRecursiveAliasDependencies()
+    public function testInstallRecursiveAliasDependencies(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '2.0'));
-        $this->repo->addPackage($packageA2 = $this->getPackage('A', '2.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '2.0'));
+        $this->repo->addPackage($packageA2 = self::getPackage('A', '2.0'));
 
-        $packageA2->setRequires(array(
-            'b' => new Link('A', 'B', $this->getVersionConstraint('==', '2.0'), 'requires', '== 2.0'),
-        ));
-        $packageB->setRequires(array(
-            'a' => new Link('B', 'A', $this->getVersionConstraint('>=', '2.0'), 'requires'),
-        ));
+        $packageA2->setRequires([
+            'b' => new Link('A', 'B', self::getVersionConstraint('==', '2.0'), Link::TYPE_REQUIRE, '== 2.0'),
+        ]);
+        $packageB->setRequires([
+            'a' => new Link('B', 'A', self::getVersionConstraint('>=', '2.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $this->repo->addPackage($packageA2Alias = $this->getAliasPackage($packageA2, '1.1'));
+        $this->repo->addPackage($packageA2Alias = self::getAliasPackage($packageA2, '1.1'));
 
         $this->reposComplete();
 
-        $this->request->install('A', $this->getVersionConstraint('==', '1.1.0.0'));
+        $this->request->requireName('A', self::getVersionConstraint('==', '1.1.0.0'));
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageA2),
-            array('job' => 'install', 'package' => $packageB),
-            array('job' => 'install', 'package' => $packageA2Alias),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageB],
+            ['job' => 'install', 'package' => $packageA2],
+            ['job' => 'markAliasInstalled', 'package' => $packageA2Alias],
+        ]);
     }
 
-    public function testInstallDevAlias()
+    public function testInstallDevAlias(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '2.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '2.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
 
-        $packageB->setRequires(array(
-            'a' => new Link('B', 'A', $this->getVersionConstraint('<', '2.0'), 'requires'),
-        ));
+        $packageB->setRequires([
+            'a' => new Link('B', 'A', self::getVersionConstraint('<', '2.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $this->repo->addPackage($packageAAlias = $this->getAliasPackage($packageA, '1.1'));
+        $this->repo->addPackage($packageAAlias = self::getAliasPackage($packageA, '1.1'));
 
         $this->reposComplete();
 
-        $this->request->install('A', $this->getVersionConstraint('==', '2.0'));
-        $this->request->install('B');
+        $this->request->requireName('A', self::getVersionConstraint('==', '2.0'));
+        $this->request->requireName('B');
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageA),
-            array('job' => 'install', 'package' => $packageAAlias),
-            array('job' => 'install', 'package' => $packageB),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageA],
+            ['job' => 'markAliasInstalled', 'package' => $packageAAlias],
+            ['job' => 'install', 'package' => $packageB],
+        ]);
+    }
+
+    public function testInstallRootAliasesIfAliasOfIsInstalled(): void
+    {
+        // root aliased, required
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageAAlias = self::getAliasPackage($packageA, '1.1'));
+        $packageAAlias->setRootPackageAlias(true);
+        // root aliased, not required, should still be installed as it is root alias
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($packageBAlias = self::getAliasPackage($packageB, '1.1'));
+        $packageBAlias->setRootPackageAlias(true);
+        // regular alias, not required, alias should not be installed
+        $this->repo->addPackage($packageC = self::getPackage('C', '1.0'));
+        $this->repo->addPackage($packageCAlias = self::getAliasPackage($packageC, '1.1'));
+
+        $this->reposComplete();
+
+        $this->request->requireName('A', self::getVersionConstraint('==', '1.1'));
+        $this->request->requireName('B', self::getVersionConstraint('==', '1.0'));
+        $this->request->requireName('C', self::getVersionConstraint('==', '1.0'));
+
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageA],
+            ['job' => 'markAliasInstalled', 'package' => $packageAAlias],
+            ['job' => 'install', 'package' => $packageB],
+            ['job' => 'markAliasInstalled', 'package' => $packageBAlias],
+            ['job' => 'install', 'package' => $packageC],
+            ['job' => 'markAliasInstalled', 'package' => $packageCAlias],
+        ]);
     }
 
     /**
@@ -847,95 +976,125 @@ class SolverTest extends TestCase
      * In particular in this case the goal is to first have the solver decide X 2.0 should not be installed to later
      * decide to learn that X 2.0 must be installed and revert decisions to retry solving with this new assumption.
      */
-    public function testLearnPositiveLiteral()
+    public function testLearnPositiveLiteral(): void
     {
-        $this->repo->addPackage($packageA = $this->getPackage('A', '1.0'));
-        $this->repo->addPackage($packageB = $this->getPackage('B', '1.0'));
-        $this->repo->addPackage($packageC1 = $this->getPackage('C', '1.0'));
-        $this->repo->addPackage($packageC2 = $this->getPackage('C', '2.0'));
-        $this->repo->addPackage($packageD = $this->getPackage('D', '1.0'));
-        $this->repo->addPackage($packageE = $this->getPackage('E', '1.0'));
-        $this->repo->addPackage($packageF1 = $this->getPackage('F', '1.0'));
-        $this->repo->addPackage($packageF2 = $this->getPackage('F', '2.0'));
-        $this->repo->addPackage($packageG1 = $this->getPackage('G', '1.0'));
-        $this->repo->addPackage($packageG2 = $this->getPackage('G', '2.0'));
-        $this->repo->addPackage($packageG3 = $this->getPackage('G', '3.0'));
+        $this->repo->addPackage($packageA = self::getPackage('A', '1.0'));
+        $this->repo->addPackage($packageB = self::getPackage('B', '1.0'));
+        $this->repo->addPackage($packageC1 = self::getPackage('C', '1.0'));
+        $this->repo->addPackage($packageC2 = self::getPackage('C', '2.0'));
+        $this->repo->addPackage($packageD = self::getPackage('D', '1.0'));
+        $this->repo->addPackage($packageE = self::getPackage('E', '1.0'));
+        $this->repo->addPackage($packageF1 = self::getPackage('F', '1.0'));
+        $this->repo->addPackage($packageF2 = self::getPackage('F', '2.0'));
+        $this->repo->addPackage($packageG1 = self::getPackage('G', '1.0'));
+        $this->repo->addPackage($packageG2 = self::getPackage('G', '2.0'));
+        $this->repo->addPackage($packageG3 = self::getPackage('G', '3.0'));
 
-        $packageA->setRequires(array(
-            'b' => new Link('A', 'B', $this->getVersionConstraint('==', '1.0'), 'requires'),
-            'c' => new Link('A', 'C', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-            'd' => new Link('A', 'D', $this->getVersionConstraint('==', '1.0'), 'requires'),
-        ));
+        $packageA->setRequires([
+            'b' => new Link('A', 'B', self::getVersionConstraint('==', '1.0'), Link::TYPE_REQUIRE),
+            'c' => new Link('A', 'C', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+            'd' => new Link('A', 'D', self::getVersionConstraint('==', '1.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageB->setRequires(array(
-            'e' => new Link('B', 'E', $this->getVersionConstraint('==', '1.0'), 'requires'),
-        ));
+        $packageB->setRequires([
+            'e' => new Link('B', 'E', self::getVersionConstraint('==', '1.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageC1->setRequires(array(
-            'f' => new Link('C', 'F', $this->getVersionConstraint('==', '1.0'), 'requires'),
-        ));
-        $packageC2->setRequires(array(
-            'f' => new Link('C', 'F', $this->getVersionConstraint('==', '1.0'), 'requires'),
-            'g' => new Link('C', 'G', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
+        $packageC1->setRequires([
+            'f' => new Link('C', 'F', self::getVersionConstraint('==', '1.0'), Link::TYPE_REQUIRE),
+        ]);
+        $packageC2->setRequires([
+            'f' => new Link('C', 'F', self::getVersionConstraint('==', '1.0'), Link::TYPE_REQUIRE),
+            'g' => new Link('C', 'G', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageD->setRequires(array(
-            'f' => new Link('D', 'F', $this->getVersionConstraint('>=', '1.0'), 'requires'),
-        ));
+        $packageD->setRequires([
+            'f' => new Link('D', 'F', self::getVersionConstraint('>=', '1.0'), Link::TYPE_REQUIRE),
+        ]);
 
-        $packageE->setRequires(array(
-            'g' => new Link('E', 'G', $this->getVersionConstraint('<=', '2.0'), 'requires'),
-        ));
+        $packageE->setRequires([
+            'g' => new Link('E', 'G', self::getVersionConstraint('<=', '2.0'), Link::TYPE_REQUIRE),
+        ]);
 
         $this->reposComplete();
 
-        $this->request->install('A');
+        $this->request->requireName('A');
+
+        $this->createSolver();
 
         // check correct setup for assertion later
-        $this->assertFalse($this->solver->testFlagLearnedPositiveLiteral);
+        self::assertFalse($this->solver->testFlagLearnedPositiveLiteral);
 
-        $this->checkSolverResult(array(
-            array('job' => 'install', 'package' => $packageF1),
-            array('job' => 'install', 'package' => $packageD),
-            array('job' => 'install', 'package' => $packageG2),
-            array('job' => 'install', 'package' => $packageC2),
-            array('job' => 'install', 'package' => $packageE),
-            array('job' => 'install', 'package' => $packageB),
-            array('job' => 'install', 'package' => $packageA),
-        ));
+        $this->checkSolverResult([
+            ['job' => 'install', 'package' => $packageF1],
+            ['job' => 'install', 'package' => $packageD],
+            ['job' => 'install', 'package' => $packageG2],
+            ['job' => 'install', 'package' => $packageC2],
+            ['job' => 'install', 'package' => $packageE],
+            ['job' => 'install', 'package' => $packageB],
+            ['job' => 'install', 'package' => $packageA],
+        ]);
 
         // verify that the code path leading to a negative literal resulting in a positive learned literal is actually
         // executed
-        $this->assertTrue($this->solver->testFlagLearnedPositiveLiteral);
+        self::assertTrue($this->solver->testFlagLearnedPositiveLiteral);
     }
 
-    protected function reposComplete()
+    protected function reposComplete(): void
     {
-        $this->pool->addRepository($this->repoInstalled);
-        $this->pool->addRepository($this->repo);
+        $this->repoSet->addRepository($this->repo);
+        $this->repoSet->addRepository($this->repoLocked);
     }
 
-    protected function checkSolverResult(array $expected)
+    protected function createSolver(): void
     {
+        $io = new NullIO();
+        $this->pool = $this->repoSet->createPool($this->request, $io);
+        $this->solver = new Solver($this->policy, $this->pool, $io);
+    }
+
+    /**
+     * @param array<array{job: string, package?: PackageInterface, from?: PackageInterface, to?: PackageInterface}> $expected
+     */
+    protected function checkSolverResult(array $expected): void
+    {
+        $this->createSolver();
         $transaction = $this->solver->solve($this->request);
 
-        $result = array();
-        foreach ($transaction as $operation) {
-            if ('update' === $operation->getJobType()) {
-                $result[] = array(
+        $result = [];
+        foreach ($transaction->getOperations() as $operation) {
+            if ($operation instanceof UpdateOperation) {
+                $result[] = [
                     'job' => 'update',
                     'from' => $operation->getInitialPackage(),
                     'to' => $operation->getTargetPackage(),
-                );
-            } else {
-                $job = ('uninstall' === $operation->getJobType() ? 'remove' : 'install');
-                $result[] = array(
+                ];
+            } elseif ($operation instanceof MarkAliasInstalledOperation || $operation instanceof MarkAliasUninstalledOperation) {
+                $result[] = [
+                    'job' => $operation->getOperationType(),
+                    'package' => $operation->getPackage(),
+                ];
+            } elseif ($operation instanceof UninstallOperation || $operation instanceof InstallOperation) {
+                $job = ('uninstall' === $operation->getOperationType() ? 'remove' : 'install');
+                $result[] = [
                     'job' => $job,
                     'package' => $operation->getPackage(),
-                );
+                ];
+            } else {
+                throw new \LogicException('Unexpected operation: '.get_class($operation));
             }
         }
 
-        $this->assertEquals($expected, $result);
+        $expectedReadable = [];
+        foreach ($expected as $op) {
+            $expectedReadable[] = array_map('strval', $op);
+        }
+        $resultReadable = [];
+        foreach ($result as $op) {
+            $resultReadable[] = array_map('strval', $op);
+        }
+
+        self::assertEquals($expectedReadable, $resultReadable);
+        self::assertEquals($expected, $result);
     }
 }

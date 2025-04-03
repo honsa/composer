@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -16,152 +16,141 @@ use Composer\DependencyResolver\GenericRule;
 use Composer\DependencyResolver\Rule;
 use Composer\DependencyResolver\RuleSet;
 use Composer\DependencyResolver\Pool;
-use Composer\Repository\ArrayRepository;
+use Composer\Semver\Constraint\MatchAllConstraint;
+use Composer\Semver\Constraint\MatchNoneConstraint;
 use Composer\Test\TestCase;
 
 class RuleSetTest extends TestCase
 {
-    protected $pool;
-
-    public function setUp()
+    public function testAdd(): void
     {
-        $this->pool = new Pool;
-    }
-
-    public function testAdd()
-    {
-        $rules = array(
-            RuleSet::TYPE_PACKAGE => array(),
-            RuleSet::TYPE_JOB => array(
-                new GenericRule(array(1), Rule::RULE_JOB_INSTALL, null),
-                new GenericRule(array(2), Rule::RULE_JOB_INSTALL, null),
-            ),
-            RuleSet::TYPE_LEARNED => array(
-                new GenericRule(array(), Rule::RULE_INTERNAL_ALLOW_UPDATE, null),
-            ),
-        );
+        $rules = [
+            RuleSet::TYPE_PACKAGE => [],
+            RuleSet::TYPE_REQUEST => [
+                new GenericRule([1], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]),
+                new GenericRule([2], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]),
+            ],
+            RuleSet::TYPE_LEARNED => [
+                new GenericRule([], Rule::RULE_LEARNED, 1),
+            ],
+        ];
 
         $ruleSet = new RuleSet;
 
-        $ruleSet->add($rules[RuleSet::TYPE_JOB][0], RuleSet::TYPE_JOB);
+        $ruleSet->add($rules[RuleSet::TYPE_REQUEST][0], RuleSet::TYPE_REQUEST);
         $ruleSet->add($rules[RuleSet::TYPE_LEARNED][0], RuleSet::TYPE_LEARNED);
-        $ruleSet->add($rules[RuleSet::TYPE_JOB][1], RuleSet::TYPE_JOB);
+        $ruleSet->add($rules[RuleSet::TYPE_REQUEST][1], RuleSet::TYPE_REQUEST);
 
-        $this->assertEquals($rules, $ruleSet->getRules());
+        self::assertEquals($rules, $ruleSet->getRules());
     }
 
-    public function testAddIgnoresDuplicates()
+    public function testAddIgnoresDuplicates(): void
     {
-        $rules = array(
-            RuleSet::TYPE_JOB => array(
-                new GenericRule(array(), Rule::RULE_JOB_INSTALL, null),
-                new GenericRule(array(), Rule::RULE_JOB_INSTALL, null),
-                new GenericRule(array(), Rule::RULE_JOB_INSTALL, null),
-            ),
-        );
+        $rules = [
+            RuleSet::TYPE_REQUEST => [
+                new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]),
+                new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]),
+                new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]),
+            ],
+        ];
 
         $ruleSet = new RuleSet;
 
-        $ruleSet->add($rules[RuleSet::TYPE_JOB][0], RuleSet::TYPE_JOB);
-        $ruleSet->add($rules[RuleSet::TYPE_JOB][1], RuleSet::TYPE_JOB);
-        $ruleSet->add($rules[RuleSet::TYPE_JOB][2], RuleSet::TYPE_JOB);
+        $ruleSet->add($rules[RuleSet::TYPE_REQUEST][0], RuleSet::TYPE_REQUEST);
+        $ruleSet->add($rules[RuleSet::TYPE_REQUEST][1], RuleSet::TYPE_REQUEST);
+        $ruleSet->add($rules[RuleSet::TYPE_REQUEST][2], RuleSet::TYPE_REQUEST);
 
-        $this->assertCount(1, $ruleSet->getIteratorFor(array(RuleSet::TYPE_JOB)));
+        self::assertCount(1, $ruleSet->getIteratorFor([RuleSet::TYPE_REQUEST]));
     }
 
-    /**
-     * @expectedException \OutOfBoundsException
-     */
-    public function testAddWhenTypeIsNotRecognized()
+    public function testAddWhenTypeIsNotRecognized(): void
     {
         $ruleSet = new RuleSet;
 
-        $ruleSet->add(new GenericRule(array(), Rule::RULE_JOB_INSTALL, null), 7);
+        self::expectException('OutOfBoundsException');
+        // @phpstan-ignore argument.type
+        $ruleSet->add(new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]), 7);
     }
 
-    public function testCount()
+    public function testCount(): void
     {
         $ruleSet = new RuleSet;
 
-        $ruleSet->add(new GenericRule(array(1), Rule::RULE_JOB_INSTALL, null), RuleSet::TYPE_JOB);
-        $ruleSet->add(new GenericRule(array(2), Rule::RULE_JOB_INSTALL, null), RuleSet::TYPE_JOB);
+        $ruleSet->add(new GenericRule([1], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]), RuleSet::TYPE_REQUEST);
+        $ruleSet->add(new GenericRule([2], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]), RuleSet::TYPE_REQUEST);
 
-        $this->assertEquals(2, $ruleSet->count());
+        self::assertEquals(2, $ruleSet->count());
     }
 
-    public function testRuleById()
+    public function testRuleById(): void
     {
         $ruleSet = new RuleSet;
 
-        $rule = new GenericRule(array(), Rule::RULE_JOB_INSTALL, null);
-        $ruleSet->add($rule, RuleSet::TYPE_JOB);
+        $rule = new GenericRule([], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $ruleSet->add($rule, RuleSet::TYPE_REQUEST);
 
-        $this->assertSame($rule, $ruleSet->ruleById[0]);
+        self::assertSame($rule, $ruleSet->ruleById[0]);
     }
 
-    public function testGetIterator()
+    public function testGetIterator(): void
     {
         $ruleSet = new RuleSet;
 
-        $rule1 = new GenericRule(array(1), Rule::RULE_JOB_INSTALL, null);
-        $rule2 = new GenericRule(array(2), Rule::RULE_JOB_INSTALL, null);
-        $ruleSet->add($rule1, RuleSet::TYPE_JOB);
+        $rule1 = new GenericRule([1], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule2 = new GenericRule([2], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $ruleSet->add($rule1, RuleSet::TYPE_REQUEST);
         $ruleSet->add($rule2, RuleSet::TYPE_LEARNED);
 
         $iterator = $ruleSet->getIterator();
 
-        $this->assertSame($rule1, $iterator->current());
+        self::assertSame($rule1, $iterator->current());
         $iterator->next();
-        $this->assertSame($rule2, $iterator->current());
+        self::assertSame($rule2, $iterator->current());
     }
 
-    public function testGetIteratorFor()
+    public function testGetIteratorFor(): void
     {
         $ruleSet = new RuleSet;
-        $rule1 = new GenericRule(array(1), Rule::RULE_JOB_INSTALL, null);
-        $rule2 = new GenericRule(array(2), Rule::RULE_JOB_INSTALL, null);
+        $rule1 = new GenericRule([1], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule2 = new GenericRule([2], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
 
-        $ruleSet->add($rule1, RuleSet::TYPE_JOB);
+        $ruleSet->add($rule1, RuleSet::TYPE_REQUEST);
         $ruleSet->add($rule2, RuleSet::TYPE_LEARNED);
 
         $iterator = $ruleSet->getIteratorFor(RuleSet::TYPE_LEARNED);
 
-        $this->assertSame($rule2, $iterator->current());
+        self::assertSame($rule2, $iterator->current());
     }
 
-    public function testGetIteratorWithout()
+    public function testGetIteratorWithout(): void
     {
         $ruleSet = new RuleSet;
-        $rule1 = new GenericRule(array(1), Rule::RULE_JOB_INSTALL, null);
-        $rule2 = new GenericRule(array(2), Rule::RULE_JOB_INSTALL, null);
+        $rule1 = new GenericRule([1], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
+        $rule2 = new GenericRule([2], Rule::RULE_ROOT_REQUIRE, ['packageName' => '', 'constraint' => new MatchAllConstraint]);
 
-        $ruleSet->add($rule1, RuleSet::TYPE_JOB);
+        $ruleSet->add($rule1, RuleSet::TYPE_REQUEST);
         $ruleSet->add($rule2, RuleSet::TYPE_LEARNED);
 
-        $iterator = $ruleSet->getIteratorWithout(RuleSet::TYPE_JOB);
+        $iterator = $ruleSet->getIteratorWithout(RuleSet::TYPE_REQUEST);
 
-        $this->assertSame($rule2, $iterator->current());
+        self::assertSame($rule2, $iterator->current());
     }
 
-    public function testPrettyString()
+    public function testPrettyString(): void
     {
-        $repo = new ArrayRepository;
-        $repo->addPackage($p = $this->getPackage('foo', '2.1'));
-        $this->pool->addRepository($repo);
+        $pool = new Pool([
+            $p = self::getPackage('foo', '2.1'),
+        ]);
+
+        $repositorySetMock = $this->getMockBuilder('Composer\Repository\RepositorySet')->disableOriginalConstructor()->getMock();
+        $requestMock = $this->getMockBuilder('Composer\DependencyResolver\Request')->disableOriginalConstructor()->getMock();
 
         $ruleSet = new RuleSet;
         $literal = $p->getId();
-        $rule = new GenericRule(array($literal), Rule::RULE_JOB_INSTALL, null);
+        $rule = new GenericRule([$literal], Rule::RULE_ROOT_REQUIRE, ['packageName' => 'foo/bar', 'constraint' => new MatchNoneConstraint]);
 
-        $ruleSet->add($rule, RuleSet::TYPE_JOB);
+        $ruleSet->add($rule, RuleSet::TYPE_REQUEST);
 
-        $this->assertContains('JOB     : Install command rule (install foo 2.1)', $ruleSet->getPrettyString($this->pool));
-    }
-
-    private function getRuleMock()
-    {
-        return $this->getMockBuilder('Composer\DependencyResolver\Rule')
-            ->disableOriginalConstructor()
-            ->getMock();
+        self::assertStringContainsString('REQUEST : No package found to satisfy root composer.json require foo/bar', $ruleSet->getPrettyString($repositorySetMock, $requestMock, $pool));
     }
 }

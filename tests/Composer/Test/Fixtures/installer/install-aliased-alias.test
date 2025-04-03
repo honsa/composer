@@ -8,15 +8,16 @@ Installing double aliased package
             "package": [
                 {
                     "name": "a/a", "version": "dev-master",
-                    "dist": { "type": "file", "url": "" },
+                    "dist": { "type": "file", "url": "https://example.org" },
                     "require": {
                         "b/b": "dev-master"
-                    }
+                    },
+                    "default-branch": true
                 },
                 {
                     "name": "b/b", "version": "dev-foo",
                     "extra": { "branch-alias": { "dev-foo": "1.0.x-dev" } },
-                    "dist": { "type": "file", "url": "" }
+                    "dist": { "type": "file", "url": "https://example.org" }
                 }
             ]
         }
@@ -31,6 +32,7 @@ Installing double aliased package
 install
 --EXPECT--
 Installing b/b (dev-foo)
+Marking b/b (1.0.x-dev) as installed, alias of b/b (dev-foo)
 Marking b/b (dev-master) as installed, alias of b/b (dev-foo)
 Installing a/a (dev-master)
-Marking b/b (1.0.x-dev) as installed, alias of b/b (dev-foo)
+Marking a/a (9999999-dev) as installed, alias of a/a (dev-master)

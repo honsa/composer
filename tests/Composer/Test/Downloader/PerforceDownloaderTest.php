@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 /*
  * This file is part of Composer.
@@ -17,68 +17,58 @@ use Composer\Config;
 use Composer\Repository\VcsRepository;
 use Composer\IO\IOInterface;
 use Composer\Test\TestCase;
-use Composer\Util\Filesystem;
+use Composer\Factory;
 
 /**
  * @author Matt Whittom <Matt.Whittom@veteransunited.com>
  */
 class PerforceDownloaderTest extends TestCase
 {
+    /** @var \Composer\Config */
     protected $config;
-    /** @var PerforceDownloader */
+    /** @var \Composer\Downloader\PerforceDownloader */
     protected $downloader;
+    /** @var \Composer\IO\IOInterface&\PHPUnit\Framework\MockObject\MockObject */
     protected $io;
+    /** @var \Composer\Package\PackageInterface&\PHPUnit\Framework\MockObject\MockObject */
     protected $package;
+    /** @var \Composer\Test\Mock\ProcessExecutorMock */
     protected $processExecutor;
+    /** @var string[] */
     protected $repoConfig;
+    /** @var \Composer\Repository\VcsRepository&\PHPUnit\Framework\MockObject\MockObject */
     protected $repository;
+    /** @var string */
     protected $testPath;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->testPath = $this->getUniqueTmpDirectory();
+        $this->testPath = self::getUniqueTmpDirectory();
         $this->repoConfig = $this->getRepoConfig();
         $this->config = $this->getConfig();
         $this->io = $this->getMockIoInterface();
-        $this->processExecutor = $this->getMockProcessExecutor();
+        $this->processExecutor = $this->getProcessExecutorMock();
         $this->repository = $this->getMockRepository($this->repoConfig, $this->io, $this->config);
         $this->package = $this->getMockPackageInterface($this->repository);
         $this->downloader = new PerforceDownloader($this->io, $this->config, $this->processExecutor);
     }
 
-    protected function tearDown()
+    protected function getConfig(array $configOptions = [], bool $useEnvironment = false): Config
     {
-        $this->downloader = null;
-        $this->package = null;
-        $this->repository = null;
-        $this->io = null;
-        $this->config = null;
-        $this->repoConfig = null;
-        if (is_dir($this->testPath)) {
-            $fs = new Filesystem;
-            $fs->removeDirectory($this->testPath);
-        }
+        return parent::getConfig(array_merge(['home' => $this->testPath], $configOptions), $useEnvironment);
     }
 
-    protected function getMockProcessExecutor()
-    {
-        return $this->getMockBuilder('Composer\Util\ProcessExecutor')->getMock();
-    }
-
-    protected function getConfig()
-    {
-        $config = new Config();
-        $settings = array('config' => array('home' => $this->testPath));
-        $config->merge($settings);
-
-        return $config;
-    }
-
+    /**
+     * @return \Composer\IO\IOInterface&\PHPUnit\Framework\MockObject\MockObject
+     */
     protected function getMockIoInterface()
     {
         return $this->getMockBuilder('Composer\IO\IOInterface')->getMock();
     }
 
+    /**
+     * @return \Composer\Package\PackageInterface&\PHPUnit\Framework\MockObject\MockObject
+     */
     protected function getMockPackageInterface(VcsRepository $repository)
     {
         $package = $this->getMockBuilder('Composer\Package\PackageInterface')->getMock();
@@ -87,28 +77,38 @@ class PerforceDownloaderTest extends TestCase
         return $package;
     }
 
-    protected function getRepoConfig()
+    /**
+     * @return string[]
+     */
+    protected function getRepoConfig(): array
     {
-        return array('url' => 'TEST_URL', 'p4user' => 'TEST_USER');
+        return ['url' => 'TEST_URL', 'p4user' => 'TEST_USER'];
     }
 
+    /**
+     * @param string[] $repoConfig
+     * @return \Composer\Repository\VcsRepository&\PHPUnit\Framework\MockObject\MockObject
+     */
     protected function getMockRepository(array $repoConfig, IOInterface $io, Config $config)
     {
         $repository = $this->getMockBuilder('Composer\Repository\VcsRepository')
-            ->setMethods(array('getRepoConfig'))
-            ->setConstructorArgs(array($repoConfig, $io, $config))
+            ->onlyMethods(['getRepoConfig'])
+            ->setConstructorArgs([$repoConfig, $io, $config, Factory::createHttpDownloader($io, $config)])
             ->getMock();
         $repository->expects($this->any())->method('getRepoConfig')->will($this->returnValue($repoConfig));
 
         return $repository;
     }
 
-    public function testInitPerforceInstantiatesANewPerforceObject()
+    /**
+     * @doesNotPerformAssertions
+     */
+    public function testInitPerforceInstantiatesANewPerforceObject(): void
     {
         $this->downloader->initPerforce($this->package, $this->testPath, 'SOURCE_REF');
     }
 
-    public function testInitPerforceDoesNothingIfPerforceAlreadySet()
+    public function testInitPerforceDoesNothingIfPerforceAlreadySet(): void
     {
         $perforce = $this->getMockBuilder('Composer\Util\Perforce')->disableOriginalConstructor()->getMock();
         $this->downloader->setPerforce($perforce);
@@ -120,46 +120,46 @@ class PerforceDownloaderTest extends TestCase
      * @depends testInitPerforceInstantiatesANewPerforceObject
      * @depends testInitPerforceDoesNothingIfPerforceAlreadySet
      */
-    public function testDoDownloadWithTag()
+    public function testDoInstallWithTag(): void
     {
         //I really don't like this test but the logic of each Perforce method is tested in the Perforce class.  Really I am just enforcing workflow.
         $ref = 'SOURCE_REF@123';
         $label = 123;
         $this->package->expects($this->once())->method('getSourceReference')->will($this->returnValue($ref));
         $this->io->expects($this->once())->method('writeError')->with($this->stringContains('Cloning '.$ref));
-        $perforceMethods = array('setStream', 'p4Login', 'writeP4ClientSpec', 'connectClient', 'syncCodeBase', 'cleanupClientSpec');
-        $perforce = $this->getMockBuilder('Composer\Util\Perforce', $perforceMethods)->disableOriginalConstructor()->getMock();
-        $perforce->expects($this->at(0))->method('initializePath')->with($this->equalTo($this->testPath));
-        $perforce->expects($this->at(1))->method('setStream')->with($this->equalTo($ref));
-        $perforce->expects($this->at(2))->method('p4Login');
-        $perforce->expects($this->at(3))->method('writeP4ClientSpec');
-        $perforce->expects($this->at(4))->method('connectClient');
-        $perforce->expects($this->at(5))->method('syncCodeBase')->with($label);
-        $perforce->expects($this->at(6))->method('cleanupClientSpec');
+        $perforceMethods = ['setStream', 'p4Login', 'writeP4ClientSpec', 'connectClient', 'syncCodeBase', 'cleanupClientSpec'];
+        $perforce = $this->getMockBuilder('Composer\Util\Perforce')->disableOriginalConstructor()->getMock();
+        $perforce->expects($this->once())->method('initializePath')->with($this->equalTo($this->testPath));
+        $perforce->expects($this->once())->method('setStream')->with($this->equalTo($ref));
+        $perforce->expects($this->once())->method('p4Login');
+        $perforce->expects($this->once())->method('writeP4ClientSpec');
+        $perforce->expects($this->once())->method('connectClient');
+        $perforce->expects($this->once())->method('syncCodeBase')->with($label);
+        $perforce->expects($this->once())->method('cleanupClientSpec');
         $this->downloader->setPerforce($perforce);
-        $this->downloader->doDownload($this->package, $this->testPath, 'url');
+        $this->downloader->doInstall($this->package, $this->testPath, 'url');
     }
 
     /**
      * @depends testInitPerforceInstantiatesANewPerforceObject
      * @depends testInitPerforceDoesNothingIfPerforceAlreadySet
      */
-    public function testDoDownloadWithNoTag()
+    public function testDoInstallWithNoTag(): void
     {
         $ref = 'SOURCE_REF';
         $label = null;
         $this->package->expects($this->once())->method('getSourceReference')->will($this->returnValue($ref));
         $this->io->expects($this->once())->method('writeError')->with($this->stringContains('Cloning '.$ref));
-        $perforceMethods = array('setStream', 'p4Login', 'writeP4ClientSpec', 'connectClient', 'syncCodeBase', 'cleanupClientSpec');
-        $perforce = $this->getMockBuilder('Composer\Util\Perforce', $perforceMethods)->disableOriginalConstructor()->getMock();
-        $perforce->expects($this->at(0))->method('initializePath')->with($this->equalTo($this->testPath));
-        $perforce->expects($this->at(1))->method('setStream')->with($this->equalTo($ref));
-        $perforce->expects($this->at(2))->method('p4Login');
-        $perforce->expects($this->at(3))->method('writeP4ClientSpec');
-        $perforce->expects($this->at(4))->method('connectClient');
-        $perforce->expects($this->at(5))->method('syncCodeBase')->with($label);
-        $perforce->expects($this->at(6))->method('cleanupClientSpec');
+        $perforceMethods = ['setStream', 'p4Login', 'writeP4ClientSpec', 'connectClient', 'syncCodeBase', 'cleanupClientSpec'];
+        $perforce = $this->getMockBuilder('Composer\Util\Perforce')->disableOriginalConstructor()->getMock();
+        $perforce->expects($this->once())->method('initializePath')->with($this->equalTo($this->testPath));
+        $perforce->expects($this->once())->method('setStream')->with($this->equalTo($ref));
+        $perforce->expects($this->once())->method('p4Login');
+        $perforce->expects($this->once())->method('writeP4ClientSpec');
+        $perforce->expects($this->once())->method('connectClient');
+        $perforce->expects($this->once())->method('syncCodeBase')->with($label);
+        $perforce->expects($this->once())->method('cleanupClientSpec');
         $this->downloader->setPerforce($perforce);
-        $this->downloader->doDownload($this->package, $this->testPath, 'url');
+        $this->downloader->doInstall($this->package, $this->testPath, 'url');
     }
 }

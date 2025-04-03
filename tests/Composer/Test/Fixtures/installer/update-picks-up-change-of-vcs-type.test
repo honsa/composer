@@ -31,10 +31,18 @@ Converting from one VCS type to another (including an URL change) should update 
             "name": "a/a", "version": "1.0.0",
             "source": { "reference": "old-hg-ref", "type": "hg", "url": "old-hg-url" }
         }
-    ]
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "dev",
+    "stability-flags": {},
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": {},
+    "platform-dev": {}
 }
 --RUN--
-update
+update mirrors
 --EXPECT-LOCK--
 {
     "packages": [
@@ -47,11 +55,11 @@ update
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": [],
-    "platform-dev": []
+    "platform": {},
+    "platform-dev": {}
 }
 --EXPECT--
-
+Upgrading a/a (1.0.0 old-hg-ref => 1.0.0 new-git-ref)
