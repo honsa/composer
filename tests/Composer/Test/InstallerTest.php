@@ -19,6 +19,7 @@ use Composer\Pcre\Preg;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Composer\IO\BufferIO;
 use Composer\Json\JsonFile;
@@ -360,18 +361,19 @@ class InstallerTest extends TestCase
         $install->addOption('ignore-platform-req', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY);
         $install->addOption('no-dev', null, InputOption::VALUE_NONE);
         $install->addOption('dry-run', null, InputOption::VALUE_NONE);
-        $install->setCode(static function ($input, $output) use ($installer): int {
-            $ignorePlatformReqs = $input->getOption('ignore-platform-reqs') ?: ($input->getOption('ignore-platform-req') ?: false);
+        $install->setCode(static function (InputInterface $input, OutputInterface $output) use ($installer): int {
+            $ignorePlatformReqs = true === $input->getOption('ignore-platform-reqs') ?: ($input->getOption('ignore-platform-req') ?: false);
 
             $installer
-                ->setDevMode(!$input->getOption('no-dev'))
+                ->setDevMode(false === $input->getOption('no-dev'))
                 ->setDryRun($input->getOption('dry-run'))
                 ->setPlatformRequirementFilter(PlatformRequirementFilterFactory::fromBoolOrList($ignorePlatformReqs))
                 ->setAudit(false);
 
             return $installer->run();
         });
-        $application->add($install);
+        // Compatibility layer for symfony/console <7.4
+        method_exists($application, 'addCommand') ? $application->addCommand($install) : $application->add($install);
 
         $update = new Command('update');
         $update->addOption('ignore-platform-reqs', null, InputOption::VALUE_NONE);
@@ -386,27 +388,27 @@ class InstallerTest extends TestCase
         $update->addOption('prefer-stable', null, InputOption::VALUE_NONE);
         $update->addOption('prefer-lowest', null, InputOption::VALUE_NONE);
         $update->addArgument('packages', InputArgument::IS_ARRAY | InputArgument::OPTIONAL);
-        $update->setCode(static function ($input, $output) use ($installer): int {
+        $update->setCode(static function (InputInterface $input, OutputInterface $output) use ($installer): int {
             $packages = $input->getArgument('packages');
             $filteredPackages = array_filter($packages, static function ($package): bool {
                 return !in_array($package, ['lock', 'nothing', 'mirrors'], true);
             });
-            $updateMirrors = $input->getOption('lock') || count($filteredPackages) !== count($packages);
+            $updateMirrors = true === $input->getOption('lock') || count($filteredPackages) !== count($packages);
             $packages = $filteredPackages;
 
             $updateAllowTransitiveDependencies = Request::UPDATE_ONLY_LISTED;
-            if ($input->getOption('with-all-dependencies')) {
+            if (true === $input->getOption('with-all-dependencies')) {
                 $updateAllowTransitiveDependencies = Request::UPDATE_LISTED_WITH_TRANSITIVE_DEPS;
-            } elseif ($input->getOption('with-dependencies')) {
+            } elseif (true === $input->getOption('with-dependencies')) {
                 $updateAllowTransitiveDependencies = Request::UPDATE_LISTED_WITH_TRANSITIVE_DEPS_NO_ROOT_REQUIRE;
             }
 
-            $ignorePlatformReqs = $input->getOption('ignore-platform-reqs') ?: ($input->getOption('ignore-platform-req') ?: false);
+            $ignorePlatformReqs = true === $input->getOption('ignore-platform-reqs') ?: ($input->getOption('ignore-platform-req') ?: false);
 
             $installer
-                ->setDevMode(!$input->getOption('no-dev'))
+                ->setDevMode(false === $input->getOption('no-dev'))
                 ->setUpdate(true)
-                ->setInstall(!$input->getOption('no-install'))
+                ->setInstall(false === $input->getOption('no-install'))
                 ->setDryRun($input->getOption('dry-run'))
                 ->setUpdateMirrors($updateMirrors)
                 ->setUpdateAllowList($packages)
@@ -419,7 +421,8 @@ class InstallerTest extends TestCase
 
             return $installer->run();
         });
-        $application->add($update);
+        // Compatibility layer for symfony/console <7.4
+        method_exists($application, 'addCommand') ? $application->addCommand($update) : $application->add($update);
 
         if (!Preg::isMatch('{^(install|update)\b}', $run)) {
             throw new \UnexpectedValueException('The run command only supports install and update');
@@ -508,6 +511,10 @@ class InstallerTest extends TestCase
 
             try {
                 $testData = self::readTestFile($file, $fixturesDir);
+                // skip 64bit related tests on 32bit
+                if (str_contains($testData['EXPECT-OUTPUT'] ?? '', 'php-64bit') && PHP_INT_SIZE === 4) {
+                    continue;
+                }
 
                 $installed = [];
                 $installedDev = [];

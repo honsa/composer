@@ -24,13 +24,13 @@ class ZipDownloaderTest extends TestCase
 {
     /** @var string */
     private $testDir;
-    /** @var \Composer\Util\HttpDownloader */
+    /** @var HttpDownloader */
     private $httpDownloader;
     /** @var \Composer\IO\IOInterface&\PHPUnit\Framework\MockObject\MockObject */
     private $io;
     /** @var \Composer\Config&\PHPUnit\Framework\MockObject\MockObject */
     private $config;
-    /** @var \Composer\Package\PackageInterface&\PHPUnit\Framework\MockObject\MockObject */
+    /** @var PackageInterface&\PHPUnit\Framework\MockObject\MockObject */
     private $package;
     /** @var string */
     private $filename;
@@ -43,6 +43,9 @@ class ZipDownloaderTest extends TestCase
         $dlConfig = $this->getMockBuilder('Composer\Config')->getMock();
         $this->httpDownloader = new HttpDownloader($this->io, $dlConfig);
         $this->package = $this->getMockBuilder('Composer\Package\PackageInterface')->getMock();
+        $this->package->expects($this->any())
+            ->method('getName')
+            ->will($this->returnValue('test/pkg'));
 
         $this->filename = $this->testDir.'/composer-test.zip';
         file_put_contents($this->filename, 'zip');
@@ -58,13 +61,13 @@ class ZipDownloaderTest extends TestCase
 
     /**
      * @param mixed $value
-     * @param ?\Composer\Test\Downloader\MockedZipDownloader $obj
+     * @param ?MockedZipDownloader $obj
      */
     public function setPrivateProperty(string $name, $value, $obj = null): void
     {
         $reflectionClass = new \ReflectionClass('Composer\Downloader\ZipDownloader');
         $reflectedProperty = $reflectionClass->getProperty($name);
-        $reflectedProperty->setAccessible(true);
+        (\PHP_VERSION_ID < 80100) and $reflectedProperty->setAccessible(true);
         $reflectedProperty->setValue($obj, $value);
     }
 
@@ -132,7 +135,7 @@ class ZipDownloaderTest extends TestCase
     public function testZipArchiveExtractOnlyFailed(): void
     {
         self::expectException('RuntimeException');
-        self::expectExceptionMessage('The archive may contain identical file names with different capitalization (which fails on case insensitive filesystems): Not a directory');
+        self::expectExceptionMessage('The archive for "test/pkg" may contain identical file names with different capitalization (which fails on case insensitive filesystems): Not a directory');
         if (!class_exists('ZipArchive')) {
             $this->markTestSkipped('zip extension missing');
         }
@@ -179,7 +182,7 @@ class ZipDownloaderTest extends TestCase
     public function testSystemUnzipOnlyFailed(): void
     {
         self::expectException('Exception');
-        self::expectExceptionMessage('Failed to extract : (1) unzip');
+        self::expectExceptionMessage('Failed to extract test/pkg: (1) unzip');
         $this->setPrivateProperty('isWindows', false);
         $this->setPrivateProperty('hasZipArchive', false);
         $this->setPrivateProperty('unzipCommands', [['unzip', 'unzip -qq %s -d %s']]);
@@ -316,7 +319,7 @@ class ZipDownloaderTest extends TestCase
     }
 
     /**
-     * @param ?\React\Promise\PromiseInterface<mixed> $promise
+     * @param ?PromiseInterface<mixed> $promise
      */
     private function wait($promise): void
     {

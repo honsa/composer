@@ -1,3 +1,56 @@
+### [2.8.12] 2025-09-19
+
+  * Fixed json schema issues with version validation (#12512)
+  * Fixed PHP 8.5 deprecation warnings (#12513)
+  * Fixed support for Bitbucket API tokens (#12515)
+  * Fixed handling of spaces in paths when using binaries (#12524)
+  * Fixed `config --global` path resolution issue (#12537)
+  * Reduced peak memory usage while loading packages (#12516)
+  * Dropped react/promise 2.x support
+
+### [2.8.11] 2025-08-21
+
+  * Fixed PHP 8.5 deprecation warnings (#12504, #12493, #12505)
+  * Fixed `bump` command handling of 0.x versions (#12468)
+  * Fixed psr-4 warnings being shown in some cases when using symlinked directories (#12480)
+  * Fixed `audit` command failing hard if any advisory constraint was invalid (#12507)
+
+### [2.8.10] 2025-07-10
+
+  * Fixed plugins appearing loaded despite not being loaded yet in some edge cases (#12442)
+  * Fixed forward compatibility with Symfony 7.4 (#12445)
+  * Fixed deprecation warning on PHP 8.4 when platform check fails (#12453)
+  * Fixed support for new planner role in GitLab (#12426)
+  * Fixed Bitbucket regression introduced in 2.8.0 (#12462)
+  * Fixed json schema issues with version validation (#12438)
+  * Fixed git prompt breaking some systems (#12437)
+  * Fixed warning on PHP 8.5 when curl is not loaded (#12472)
+
+### [2.8.9] 2025-05-13
+
+  * Fixed json schema issues with version validation (#12376)
+  * Fixed `bump-after-update` triggering after an `update --lock`, which makes no sense (#12371)
+  * Fixed zip bomb false positives when unpacking using `ZipArchive` (#12409)
+  * Fixed creation of empty archives (#12408)
+  * Removed output of script being run when running via `composer <script-name>` (#12383)
+
+### [2.8.8] 2025-04-04
+
+  * Fixed json schema issues with version validation (#12367)
+  * Fixed issues running on 32bit machines (#12365)
+
+### [2.8.7] 2025-04-03
+
+  * Bumped justinrainbow/json-schema dependency to 6.x (#12348)
+  * Added `COMPOSER_MAX_PARALLEL_PROCESS` env var to control max amount of parallel processes Composer will start (#12356)
+  * Added zstd/brotli presence in `diagnose` command output
+  * Fixed error handler to avoid spamming deprecation notices (#12360)
+  * Fixed InstalledVersions returning duplicate data at Composer runtime (#12225)
+  * Fixed handling of `--with ...` constraints to make them apply to packages replaced a package with a different name (#12353)
+  * Fixed deprecation warnings showing up in IDE code inspections within the vendor dir (#12331)
+  * Fixed a few json schema completeness issues (#12332, #12321)
+  * Fixed issue autoloading files with a .phar inside the path (#12326)
+
 ### [2.8.6] 2025-02-25
 
   * Added `COMPOSER_WITH_DEPENDENCIES` and `COMPOSER_WITH_ALL_DEPENDENCIES` env vars to enable the `--with[-all]-dependencies` flags (#12289)
@@ -1994,6 +2047,12 @@
 
   * Initial release
 
+[2.8.12]: https://github.com/composer/composer/compare/2.8.11...2.8.12
+[2.8.11]: https://github.com/composer/composer/compare/2.8.10...2.8.11
+[2.8.10]: https://github.com/composer/composer/compare/2.8.9...2.8.10
+[2.8.9]: https://github.com/composer/composer/compare/2.8.8...2.8.9
+[2.8.8]: https://github.com/composer/composer/compare/2.8.7...2.8.8
+[2.8.7]: https://github.com/composer/composer/compare/2.8.6...2.8.7
 [2.8.6]: https://github.com/composer/composer/compare/2.8.5...2.8.6
 [2.8.5]: https://github.com/composer/composer/compare/2.8.4...2.8.5
 [2.8.4]: https://github.com/composer/composer/compare/2.8.3...2.8.4

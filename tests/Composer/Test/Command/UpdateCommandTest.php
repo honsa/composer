@@ -15,7 +15,6 @@ namespace Composer\Test\Command;
 use Composer\Package\Link;
 use Composer\Semver\Constraint\MatchAllConstraint;
 use Composer\Test\TestCase;
-use InvalidArgumentException;
 
 class UpdateCommandTest extends TestCase
 {
@@ -148,7 +147,20 @@ Bumping dependencies
 <warning>Alternatively you can use --dev-only to only bump dependencies within "require-dev".</warning>
 No requirements to update in ./composer.json.
 OUTPUT
-            , true
+            , true,
+        ];
+
+        yield 'update & bump with lock' => [
+            $rootDepAndTransitiveDep,
+            ['--bump-after-update' => true, '--lock' => true],
+            <<<OUTPUT
+Loading composer repositories with package information
+Updating dependencies
+Nothing to modify in lock file
+Installing dependencies from lock file (including require-dev)
+Nothing to install, update or remove
+OUTPUT
+            , true,
         ];
 
         yield 'update & bump dev only' => [
@@ -167,7 +179,7 @@ Package operations: 2 installs, 0 updates, 0 removals
 Bumping dependencies
 No requirements to update in ./composer.json.
 OUTPUT
-            , true
+            , true,
         ];
 
         yield 'update & dump with failing update' => [

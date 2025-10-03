@@ -473,7 +473,7 @@ setting the `"package-path"` option to the sub-directory, in this example it
 would be `"package-path": "foo/bar/"`.
 
 If you have a private Subversion repository you can save credentials in the
-http-basic section of your config (See [Schema](04-schema.md)):
+http-basic section of your config (See [Config](06-config.md#http-basic)):
 
 ```json
 {
@@ -806,7 +806,7 @@ You can disable the default Packagist.org repository by adding this to your
 You can disable Packagist.org globally by using the global config flag:
 
 ```shell
-php composer.phar config -g repo.packagist false
+php composer.phar config -g repo.packagist.org false
 ```
 
 &larr; [Schema](04-schema.md)  |  [Config](06-config.md) &rarr;

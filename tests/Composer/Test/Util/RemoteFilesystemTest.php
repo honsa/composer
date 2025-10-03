@@ -13,7 +13,6 @@
 namespace Composer\Test\Util;
 
 use Composer\Config;
-use Composer\IO\ConsoleIO;
 use Composer\IO\IOInterface;
 use Composer\Util\AuthHelper;
 use Composer\Util\RemoteFilesystem;
@@ -270,7 +269,7 @@ class RemoteFilesystemTest extends TestCase
     public static function provideBitbucketPublicDownloadUrls(): array
     {
         return [
-            ['https://bitbucket.org/seldaek/composer-live-test-repo/downloads/composer-unit-test-download-me.txt', '1234'],
+            ['https://bitbucket.org/seldaek/composer-live-test-repo/raw/master/composer-unit-test-download-me.txt', '1234'],
         ];
     }
 
@@ -297,47 +296,6 @@ class RemoteFilesystemTest extends TestCase
     }
 
     /**
-     * Tests that a BitBucket public download is correctly retrieved when `bitbucket-oauth` is configured.
-     *
-     * @dataProvider provideBitbucketPublicDownloadUrls
-     * @param non-empty-string $url
-     * @requires PHP 7.4.17
-     */
-    public function testBitBucketPublicDownloadWithAuthConfigured(string $url, string $contents): void
-    {
-        /** @var MockObject|ConsoleIO $io */
-        $io = $this
-            ->getMockBuilder('Composer\IO\ConsoleIO')
-            ->disableOriginalConstructor()
-            ->getMock();
-
-        $domains = [];
-        $io
-            ->method('hasAuthentication')
-            ->willReturnCallback(static function ($arg) use (&$domains): bool {
-                $domains[] = $arg;
-                // first time is called with bitbucket.org, then it redirects to bbuseruploads.s3.amazonaws.com so next time we have no auth configured
-                return $arg === 'bitbucket.org';
-            });
-        $io
-        ->method('getAuthentication')
-            ->with('bitbucket.org')
-            ->willReturn([
-                'username' => 'x-token-auth',
-                // This token is fake, but it matches a valid token's pattern.
-                'password' => '1A0yeK5Po3ZEeiiRiMWLivS0jirLdoGuaSGq9NvESFx1Fsdn493wUDXC8rz_1iKVRTl1GINHEUCsDxGh5lZ=',
-            ]);
-
-        $rfs = new RemoteFilesystem($io, $this->getConfigMock());
-        $hostname = parse_url($url, PHP_URL_HOST);
-
-        $result = $rfs->getContents($hostname, $url, false);
-
-        self::assertEquals($contents, $result);
-        self::assertEquals(['bitbucket.org', 'bbuseruploads.s3.amazonaws.com'], $domains);
-    }
-
-    /**
      * @param mixed[] $args
      * @param mixed[] $options
      *
@@ -348,8 +306,8 @@ class RemoteFilesystemTest extends TestCase
         $fs = new RemoteFilesystem($io, $this->getConfigMock(), $options);
         $ref = new ReflectionMethod($fs, 'getOptionsForUrl');
         $prop = new ReflectionProperty($fs, 'fileUrl');
-        $ref->setAccessible(true);
-        $prop->setAccessible(true);
+        (\PHP_VERSION_ID < 80100) and $ref->setAccessible(true);
+        (\PHP_VERSION_ID < 80100) and $prop->setAccessible(true);
 
         $prop->setValue($fs, $fileUrl);
 
@@ -378,7 +336,7 @@ class RemoteFilesystemTest extends TestCase
     private function callCallbackGet(RemoteFilesystem $fs, int $notificationCode, int $severity, string $message, int $messageCode, int $bytesTransferred, int $bytesMax): void
     {
         $ref = new ReflectionMethod($fs, 'callbackGet');
-        $ref->setAccessible(true);
+        (\PHP_VERSION_ID < 80100) and $ref->setAccessible(true);
         $ref->invoke($fs, $notificationCode, $severity, $message, $messageCode, $bytesTransferred, $bytesMax);
     }
 
@@ -389,7 +347,7 @@ class RemoteFilesystemTest extends TestCase
     private function setAttribute($object, string $attribute, $value): void
     {
         $attr = new ReflectionProperty($object, $attribute);
-        $attr->setAccessible(true);
+        (\PHP_VERSION_ID < 80100) and $attr->setAccessible(true);
         $attr->setValue($object, $value);
     }
 
@@ -400,7 +358,7 @@ class RemoteFilesystemTest extends TestCase
     private function assertAttributeEqualsCustom($value, string $attribute, $object): void
     {
         $attr = new ReflectionProperty($object, $attribute);
-        $attr->setAccessible(true);
+        (\PHP_VERSION_ID < 80100) and $attr->setAccessible(true);
         self::assertSame($value, $attr->getValue($object));
     }
 

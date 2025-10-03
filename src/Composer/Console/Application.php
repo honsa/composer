@@ -208,7 +208,7 @@ class Application extends BaseApplication
                         $io->writeError('<info>No composer.json in current directory, to use the one at '.$dir.' run interactively or set config.use-parent-dir to true</info>');
                         break;
                     }
-                    if ($useParentDirIfNoJsonAvailable === true || $io->askConfirmation('<info>No composer.json in current directory, do you want to use the one at '.$dir.'?</info> [<comment>Y,n</comment>]? ')) {
+                    if ($useParentDirIfNoJsonAvailable === true || $io->askConfirmation('<info>No composer.json in current directory, do you want to use the one at '.$dir.'?</info> [<comment>y,n</comment>]? ')) {
                         if ($useParentDirIfNoJsonAvailable === true) {
                             $io->writeError('<info>No composer.json in current directory, changing working directory to '.$dir.'</info>');
                         } else {
@@ -280,7 +280,8 @@ class Application extends BaseApplication
                     if ($this->has($command->getName())) {
                         $io->writeError('<warning>Plugin command '.$command->getName().' ('.get_class($command).') would override a Composer command and has been skipped</warning>');
                     } else {
-                        $this->add($command);
+                        // Compatibility layer for symfony/console <7.4
+                        method_exists($this, 'addCommand') ? $this->addCommand($command) : $this->add($command);
                     }
                 }
             } catch (NoSslException $e) {
@@ -380,7 +381,9 @@ class Application extends BaseApplication
 
                                 $aliases = $composer['scripts-aliases'][$script] ?? [];
 
-                                $this->add(new Command\ScriptAliasCommand($script, $description, $aliases));
+                                $scriptAlias = new Command\ScriptAliasCommand($script, $description, $aliases);
+                                // Compatibility layer for symfony/console <7.4
+                                method_exists($this, 'addCommand') ? $this->addCommand($scriptAlias) : $this->add($scriptAlias);
                             }
                         }
                     }
@@ -441,7 +444,7 @@ class Application extends BaseApplication
             // as http error codes are all beyond the 255 range of permitted exit codes
             if ($e instanceof TransportException) {
                 $reflProp = new \ReflectionProperty($e, 'code');
-                $reflProp->setAccessible(true);
+                (\PHP_VERSION_ID < 80100) and $reflProp->setAccessible(true);
                 $reflProp->setValue($e, Installer::ERROR_TRANSPORT_EXCEPTION);
             }
 
@@ -452,15 +455,14 @@ class Application extends BaseApplication
     }
 
     /**
-     * @throws \RuntimeException
-     * @return ?string
+     * @throws RuntimeException
      */
     private function getNewWorkingDir(InputInterface $input): ?string
     {
         /** @var string|null $workingDir */
         $workingDir = $input->getParameterOption(['--working-dir', '-d'], null, true);
         if (null !== $workingDir && !is_dir($workingDir)) {
-            throw new \RuntimeException('Invalid working directory specified, '.$workingDir.' does not exist.');
+            throw new RuntimeException('Invalid working directory specified, '.$workingDir.' does not exist.');
         }
 
         return $workingDir;
@@ -603,7 +605,7 @@ class Application extends BaseApplication
      */
     protected function getDefaultCommands(): array
     {
-        $commands = array_merge(parent::getDefaultCommands(), [
+        return array_merge(parent::getDefaultCommands(), [
             new Command\AboutCommand(),
             new Command\ConfigCommand(),
             new Command\DependsCommand(),
@@ -634,13 +636,8 @@ class Application extends BaseApplication
             new Command\FundCommand(),
             new Command\ReinstallCommand(),
             new Command\BumpCommand(),
+            new Command\SelfUpdateCommand(),
         ]);
-
-        if (strpos(__FILE__, 'phar:') === 0 || '1' === Platform::getEnv('COMPOSER_TESTS_ARE_RUNNING')) {
-            $commands[] = new Command\SelfUpdateCommand();
-        }
-
-        return $commands;
     }
 
     /**

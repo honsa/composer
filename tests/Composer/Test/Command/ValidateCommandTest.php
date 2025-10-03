@@ -10,7 +10,6 @@
  * file that was distributed with this source code.
  */
 
-
 namespace Composer\Test\Command;
 
 use Composer\Test\TestCase;
@@ -72,6 +71,10 @@ OUTPUT;
             $this->markTestSkipped('Does not run on windows');
         }
 
+        if (function_exists('posix_getuid') && posix_getuid() === 0) {
+            $this->markTestSkipped('Cannot run as root');
+        }
+
         $directory = $this->initTempComposer(self::MINIMAL_VALID_CONFIGURATION);
         chmod($directory.'/composer.json', 0200);
 
@@ -118,7 +121,7 @@ OUTPUT;
 OUTPUT
         ];
 
-        $publishDataStripped= array_diff_key(
+        $publishDataStripped = array_diff_key(
             self::MINIMAL_VALID_CONFIGURATION,
             ['name' => true, 'type' => true, 'description' => true, 'license' => true]
         );
